@@ -1,3 +1,7 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import YAML from "yaml";
+
 import { createDirectusAdapter } from "@skeem/directus";
 
 import { SchemaCache } from "../cache/schema-cache.js";
@@ -11,6 +15,7 @@ import {
 } from "../errors/index.js";
 import { loadConfig } from "../config/load-config.js";
 import { requireCollection, resolveCollectionName, resolveExpandPaths, resolveRelation, filterCollections } from "./schema.js";
+import { describeCollection, schemaToDocument } from "../schema/serialization.js";
 import { buildInputNode, parseFilterAssignment, resolveRefs, topoSortOperations } from "./values.js";
 import { toSuccessEnvelope } from "../output/formatter.js";
 import type {
@@ -83,6 +88,57 @@ export class SkeemRuntime {
       operation: "ls",
       data,
       count: data.length,
+    });
+  }
+
+  async describe(collectionInput: string): Promise<SuccessEnvelope> {
+    const schema = await this.loadLiveSchema();
+    const collection = this.resolveCollection(schema, collectionInput);
+    const summary = describeCollection(collection);
+
+    return toSuccessEnvelope({
+      operation: "describe",
+      collection: collection.name,
+      data: {
+        ...summary,
+        ...(this.adapter.count ? { count: await this.adapter.count(collection.name) } : {}),
+      },
+    });
+  }
+
+  async discover(options: {
+    collections: string[];
+    outputPath?: string;
+  }): Promise<SuccessEnvelope> {
+    const schema = await this.loadLiveSchema();
+    const available = filterCollections(schema, this.config);
+    const selectedNames = options.collections.length > 0
+      ? options.collections.map((input) => this.resolveCollection(schema, input).name)
+      : available.map((collection) => collection.name);
+    const dedupedSelectedNames = Array.from(new Set(selectedNames));
+
+    const document = schemaToDocument(schema, {
+      name: deduceSchemaDocumentName(this.config),
+      collections: dedupedSelectedNames,
+    });
+
+    if (options.outputPath) {
+      const absolutePath = path.resolve(this.config.rootDir, options.outputPath);
+      await mkdir(path.dirname(absolutePath), { recursive: true });
+      await writeFile(absolutePath, stringifyDiscoveredDocument(document));
+
+      return toSuccessEnvelope({
+        operation: "discover",
+        data: {
+          path: absolutePath,
+          schema: document,
+        },
+      });
+    }
+
+    return toSuccessEnvelope({
+      operation: "discover",
+      data: document,
     });
   }
 
@@ -481,6 +537,7 @@ export class SkeemRuntime {
 
   private previewCreate(schema: Schema, collection: Collection, node: InputNode, trail: string[]): OperationLogEntry[] {
     const plan: OperationLogEntry[] = [];
+    const data: Record<string, unknown> = { ...node.fields };
 
     for (const [segment, childNode] of Object.entries(node.children)) {
       const relation = resolveRelation(collection, segment);
@@ -488,6 +545,7 @@ export class SkeemRuntime {
       const ref = makeRef([...trail, segment]);
 
       if (childNode.selector?.kind === "id") {
+        data[relation.field] = childNode.selector.id;
         plan.push({
           ref,
           operation: "reference",
@@ -498,6 +556,9 @@ export class SkeemRuntime {
       }
 
       if (childNode.selector?.kind === "resolve") {
+        data[relation.field] = {
+          resolve: childNode.selector.filter,
+        };
         plan.push({
           ref,
           operation: "resolve",
@@ -508,6 +569,10 @@ export class SkeemRuntime {
       }
 
       if (childNode.selector?.kind === "resolveOrCreate") {
+        data[relation.field] = {
+          resolveOrCreate: childNode.selector.filter,
+          ref: `${ref}.id`,
+        };
         plan.push({
           ref,
           operation: "resolveOrCreate",
@@ -524,13 +589,14 @@ export class SkeemRuntime {
       }
 
       plan.push(...this.previewCreate(schema, targetCollection, childNode, [...trail, segment]));
+      data[relation.field] = `$${ref}.id`;
     }
 
     plan.push({
       ref: makeRef(trail),
       operation: "create",
       collection: collection.name,
-      data: node.fields,
+      data,
     });
     return plan;
   }
@@ -631,6 +697,19 @@ function makeRef(trail: string[]): string {
   return trail.join("_").replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
+function deduceSchemaDocumentName(config: ResolvedConfig): string {
+  try {
+    const url = new URL(config.connection.url);
+    return url.hostname.replace(/\./g, "-");
+  } catch {
+    return "discovered-schema";
+  }
+}
+
+function stringifyDiscoveredDocument(document: ReturnType<typeof schemaToDocument>): string {
+  return YAML.stringify(document);
+}
+
 function isDirectusRequestError(error: unknown): error is {
   status: number;
   code?: string;
@@ -648,7 +727,18 @@ function isDirectusRequestError(error: unknown): error is {
 
 export async function readExecPlanFromStdin(): Promise<ExecPlanInput> {
   const stdin = await readStdin();
-  const parsed = JSON.parse(stdin) as ExecPlanInput;
+  if (stdin.trim().length === 0) {
+    throw new UsageError("Exec input must be a JSON object with an operations array.");
+  }
+
+  let parsed: ExecPlanInput;
+  try {
+    parsed = JSON.parse(stdin) as ExecPlanInput;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new UsageError(`Exec input must be valid JSON: ${message}`);
+  }
+
   if (!Array.isArray(parsed.operations)) {
     throw new UsageError("Exec input must be a JSON object with an operations array.");
   }

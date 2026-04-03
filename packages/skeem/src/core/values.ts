@@ -122,13 +122,13 @@ export function resolveRefs<T>(value: T, context: Record<string, Record<string, 
 
     const record = context[match[1]!];
     if (!record) {
-      throw new UsageError(`Unknown ref "${match[1]}".`);
+      throw new UsageError(`Unknown ref "${match[1]}" referenced in "${value}".`);
     }
 
     let current: unknown = record;
     for (const segment of match[2]!.slice(1).split(".")) {
-      if (!current || typeof current !== "object") {
-        throw new UsageError(`Cannot resolve ref "${value}".`);
+      if (!current || typeof current !== "object" || !(segment in current)) {
+        throw new UsageError(`Cannot resolve ref "${value}"; segment "${segment}" was not found.`);
       }
       current = (current as Record<string, unknown>)[segment];
     }
@@ -149,10 +149,21 @@ export function resolveRefs<T>(value: T, context: Record<string, Record<string, 
 }
 
 export function topoSortOperations(operations: ExecOperationInput[]): ExecOperationInput[] {
-  const byRef = new Map(operations.map((operation) => [operation.ref, operation]));
+  const byRef = new Map<string, ExecOperationInput>();
   const visited = new Set<string>();
   const visiting = new Set<string>();
   const ordered: ExecOperationInput[] = [];
+  const path: string[] = [];
+
+  for (const operation of operations) {
+    if (!operation.ref || operation.ref.trim().length === 0) {
+      throw new UsageError("Exec operations require a non-empty ref.");
+    }
+    if (byRef.has(operation.ref)) {
+      throw new UsageError(`Duplicate exec ref "${operation.ref}".`);
+    }
+    byRef.set(operation.ref, operation);
+  }
 
   for (const operation of operations) {
     visit(operation.ref);
@@ -160,23 +171,31 @@ export function topoSortOperations(operations: ExecOperationInput[]): ExecOperat
 
   return ordered;
 
-  function visit(ref: string): void {
+  function visit(ref: string, fromRef?: string): void {
     if (visited.has(ref)) {
       return;
-    }
-    if (visiting.has(ref)) {
-      throw new UsageError(`Cycle detected in exec plan around "${ref}".`);
     }
 
     const operation = byRef.get(ref);
     if (!operation) {
-      throw new UsageError(`Missing operation ref "${ref}".`);
+      throw new UsageError(
+        fromRef
+          ? `Exec operation "${fromRef}" references unknown ref "${ref}".`
+          : `Missing operation ref "${ref}".`,
+      );
+    }
+    if (visiting.has(ref)) {
+      const cycleStart = path.indexOf(ref);
+      const cyclePath = [...path.slice(cycleStart === -1 ? 0 : cycleStart), ref].join(" -> ");
+      throw new UsageError(`Cycle detected in exec plan: ${cyclePath}.`);
     }
 
     visiting.add(ref);
+    path.push(ref);
     for (const dependency of extractRefDependencies(operation)) {
-      visit(dependency);
+      visit(dependency, ref);
     }
+    path.pop();
     visiting.delete(ref);
     visited.add(ref);
     ordered.push(operation);
