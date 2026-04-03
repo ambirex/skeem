@@ -43,6 +43,34 @@ describe("topoSortOperations", () => {
 
     expect(sorted.map((entry) => entry.ref)).toEqual(["company", "person"]);
   });
+
+  test("fails with a helpful message for missing refs", () => {
+    expect(() => topoSortOperations([
+      {
+        ref: "person",
+        op: "create",
+        collection: "people",
+        data: { company_id: "$company.id" },
+      },
+    ])).toThrowError('Exec operation "person" references unknown ref "company".');
+  });
+
+  test("fails with a helpful message for cycles", () => {
+    expect(() => topoSortOperations([
+      {
+        ref: "alpha",
+        op: "create",
+        collection: "people",
+        data: { company_id: "$beta.id" },
+      },
+      {
+        ref: "beta",
+        op: "create",
+        collection: "companies",
+        data: { owner_id: "$alpha.id" },
+      },
+    ])).toThrowError('Cycle detected in exec plan: alpha -> beta -> alpha.');
+  });
 });
 
 describe("resolveRefs", () => {
@@ -66,6 +94,40 @@ describe("resolveRefs", () => {
         company_id: 42,
         label: "unchanged",
       },
+    });
+  });
+
+  test("replaces nested refs in arrays and nested objects", () => {
+    const resolved = resolveRefs(
+      {
+        updates: [
+          {
+            id: "$person.id",
+            data: {
+              company_id: "$company.id",
+            },
+          },
+        ],
+      },
+      {
+        person: {
+          id: 7,
+        },
+        company: {
+          id: 42,
+        },
+      },
+    );
+
+    expect(resolved).toEqual({
+      updates: [
+        {
+          id: 7,
+          data: {
+            company_id: 42,
+          },
+        },
+      ],
     });
   });
 });

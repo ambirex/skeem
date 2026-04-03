@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,6 +13,7 @@ const projectDir = path.join(fixtureRoot, "project");
 const databaseDir = path.join(projectDir, "database");
 const uploadsDir = path.join(projectDir, "uploads");
 const extensionsDir = path.join(projectDir, "extensions");
+const discoverOutputPath = path.join(fixtureRoot, "widgets.skeem.yaml");
 
 const directusVersion = "11.17.1";
 const sqliteVersion = "6.0.1";
@@ -35,8 +36,33 @@ try {
   serverProcess = startDirectus();
 
   await waitForDirectus();
-  await ensureCollection("widgets");
+  await ensureCollection({
+    name: "widgets",
+    fields: [
+      stringField("name"),
+    ],
+  });
+  await ensureCollection({
+    name: "companies",
+    fields: [
+      stringField("name", { required: true, unique: true }),
+      stringField("industry"),
+    ],
+  });
+  await ensureCollection({
+    name: "people",
+    fields: [
+      stringField("name", { required: true }),
+      integerField("company_id"),
+    ],
+  });
+  await ensureRelation({
+    collectionMany: "people",
+    fieldMany: "company_id",
+    collectionOne: "companies",
+  });
   await clearSkeemCache();
+  await rm(discoverOutputPath, { force: true });
 
   const lsBefore = await runSkeemJson(["ls", "--counts"]);
   const widgetsBefore = expectCollection(lsBefore, "widgets");
@@ -47,6 +73,43 @@ try {
   const cache = await runSkeemJson(["cache", "show"]);
   if (!cache.ok || !cache.data?.exists) {
     throw new Error(`Expected schema cache to exist after ls:\n${JSON.stringify(cache, null, 2)}`);
+  }
+
+  const described = await runSkeemJson(["describe", "widgets"]);
+  if (!described.ok || described.collection !== "widgets") {
+    throw new Error(`Describe failed:\n${JSON.stringify(described, null, 2)}`);
+  }
+  if (!Array.isArray(described.data?.fields) || !described.data.fields.some((field) => field.name === "name")) {
+    throw new Error(`Describe did not include the widgets.name field:\n${JSON.stringify(described, null, 2)}`);
+  }
+
+  const discovered = await runSkeemJson(["discover", "widgets"]);
+  if (!discovered.ok || discovered.operation !== "discover") {
+    throw new Error(`Discover failed:\n${JSON.stringify(discovered, null, 2)}`);
+  }
+  if (!discovered.data?.collections?.widgets?.fields?.name) {
+    throw new Error(`Discover did not include the widgets.name field:\n${JSON.stringify(discovered, null, 2)}`);
+  }
+
+  const discoveredToFile = await runSkeemJson(["discover", "widgets", "-o", discoverOutputPath]);
+  if (!discoveredToFile.ok || discoveredToFile.data?.path !== discoverOutputPath) {
+    throw new Error(`Discover file output failed:\n${JSON.stringify(discoveredToFile, null, 2)}`);
+  }
+
+  const discoveredFileContents = await readFile(discoverOutputPath, "utf8");
+  if (!discoveredFileContents.includes("collections:") || !discoveredFileContents.includes("widgets:")) {
+    throw new Error(`Discover output file did not look like schema YAML:\n${discoveredFileContents}`);
+  }
+
+  const dryRun = await runSkeemJson(["create", "people", "--name", "Dry Run", "--company.name", "Dry Run Co", "--dry-run"]);
+  if (!dryRun.ok || dryRun.operation !== "dry_run" || !Array.isArray(dryRun.plan) || dryRun.plan.length !== 2) {
+    throw new Error(`Dry-run relation preview failed:\n${JSON.stringify(dryRun, null, 2)}`);
+  }
+  if (dryRun.plan[0]?.collection !== "companies" || dryRun.plan[1]?.collection !== "people") {
+    throw new Error(`Dry-run plan order was unexpected:\n${JSON.stringify(dryRun, null, 2)}`);
+  }
+  if (dryRun.plan[1]?.data?.company_id !== "$root_company.id") {
+    throw new Error(`Dry-run root plan did not include relation placeholder:\n${JSON.stringify(dryRun, null, 2)}`);
   }
 
   const created = await runSkeemJson(["create", "widgets", "--name", "Alpha Widget"]);
@@ -100,6 +163,185 @@ try {
     throw new Error(`Expected widgets count to return to 0 but received ${widgetsAfter.count}.`);
   }
 
+  const directCompany = await runSkeemJson(["create", "companies", "--name", "Direct Link Co"]);
+  const directCompanyId = directCompany.data?.id;
+  if (!directCompany.ok || (typeof directCompanyId !== "number" && typeof directCompanyId !== "string")) {
+    throw new Error(`Failed to create direct-link company:\n${JSON.stringify(directCompany, null, 2)}`);
+  }
+
+  const directPerson = await runSkeemJson(["create", "people", "--name", "Direct Dana", "--company", `@${directCompanyId}`]);
+  if (!directPerson.ok || directPerson.data?.company_id !== directCompanyId) {
+    throw new Error(`@ relation create failed:\n${JSON.stringify(directPerson, null, 2)}`);
+  }
+
+  const nestedPerson = await runSkeemJson([
+    "create",
+    "people",
+    "--name",
+    "Nested Nora",
+    "--company.name",
+    "Nested Co",
+    "--company.industry",
+    "Technology",
+  ]);
+  if (!nestedPerson.ok || nestedPerson.operation !== "compound_create" || !Array.isArray(nestedPerson.plan) || nestedPerson.plan.length < 2) {
+    throw new Error(`Dot notation create failed:\n${JSON.stringify(nestedPerson, null, 2)}`);
+  }
+  const nestedCompany = await runSkeemJson(["find", "companies", "--where", "name=Nested Co"]);
+  if (!nestedCompany.ok || nestedCompany.count !== 1 || nestedCompany.data?.[0]?.industry !== "Technology") {
+    throw new Error(`Nested company was not created correctly:\n${JSON.stringify(nestedCompany, null, 2)}`);
+  }
+
+  const resolvedPerson = await runSkeemJson([
+    "create",
+    "people",
+    "--name",
+    "Resolved Rita",
+    "--company",
+    "?name=Nested Co",
+  ]);
+  if (!resolvedPerson.ok || resolvedPerson.data?.company_id !== nestedCompany.data[0]?.id) {
+    throw new Error(`? relation resolve failed:\n${JSON.stringify(resolvedPerson, null, 2)}`);
+  }
+
+  const resolveOrCreatePerson = await runSkeemJson([
+    "create",
+    "people",
+    "--name",
+    "Fallback Finn",
+    "--company",
+    "??name=Fallback Co",
+    "--company.industry",
+    "Services",
+  ]);
+  if (!resolveOrCreatePerson.ok) {
+    throw new Error(`?? relation create failed:\n${JSON.stringify(resolveOrCreatePerson, null, 2)}`);
+  }
+
+  const fallbackCompanies = await runSkeemJson(["find", "companies", "--where", "name=Fallback Co"]);
+  if (!fallbackCompanies.ok || fallbackCompanies.count !== 1 || fallbackCompanies.data?.[0]?.industry !== "Services") {
+    throw new Error(`?? did not create fallback company correctly:\n${JSON.stringify(fallbackCompanies, null, 2)}`);
+  }
+
+  const resolveOrCreateAgain = await runSkeemJson([
+    "create",
+    "people",
+    "--name",
+    "Fallback Fern",
+    "--company",
+    "??name=Fallback Co",
+    "--company.industry",
+    "Ignored Update",
+  ]);
+  if (!resolveOrCreateAgain.ok) {
+    throw new Error(`Second ?? relation create failed:\n${JSON.stringify(resolveOrCreateAgain, null, 2)}`);
+  }
+
+  const fallbackCompaniesAfterRepeat = await runSkeemJson(["find", "companies", "--where", "name=Fallback Co"]);
+  if (!fallbackCompaniesAfterRepeat.ok || fallbackCompaniesAfterRepeat.count !== 1 || fallbackCompaniesAfterRepeat.data?.[0]?.industry !== "Services") {
+    throw new Error(`?? should resolve existing company without mutating it:\n${JSON.stringify(fallbackCompaniesAfterRepeat, null, 2)}`);
+  }
+
+  const rollbackFailure = await runSkeemJson([
+    "create",
+    "people",
+    "--company.name",
+    "Rollback Co",
+  ], { expectFailure: true });
+  if (rollbackFailure.ok) {
+    throw new Error(`Expected rollback fixture create to fail:\n${JSON.stringify(rollbackFailure, null, 2)}`);
+  }
+
+  const rollbackCompanies = await runSkeemJson(["find", "companies", "--where", "name=Rollback Co"]);
+  if (!rollbackCompanies.ok || rollbackCompanies.count !== 0) {
+    throw new Error(`Rollback did not clean up created child record:\n${JSON.stringify(rollbackCompanies, null, 2)}`);
+  }
+
+  const execPlan = {
+    operations: [
+      {
+        ref: "updated_person",
+        op: "update",
+        collection: "people",
+        id: "$person_a.id",
+        data: {
+          name: "Exec Alice Updated",
+        },
+      },
+      {
+        ref: "person_b_check",
+        op: "get",
+        collection: "people",
+        id: "$person_b.id",
+      },
+      {
+        ref: "person_a",
+        op: "create",
+        collection: "people",
+        data: {
+          name: "Exec Alice",
+          company_id: "$company.id",
+        },
+      },
+      {
+        ref: "company",
+        op: "create",
+        collection: "companies",
+        data: {
+          name: "Exec Co",
+          industry: "Automation",
+        },
+      },
+      {
+        ref: "person_b",
+        op: "create",
+        collection: "people",
+        data: {
+          name: "Exec Bob",
+          company_id: "$company.id",
+        },
+      },
+    ],
+  };
+
+  const execDryRun = await runSkeemJson(["exec", "--dry-run"], {
+    stdin: JSON.stringify(execPlan),
+  });
+  if (!execDryRun.ok || execDryRun.operation !== "dry_run" || !Array.isArray(execDryRun.plan)) {
+    throw new Error(`Exec dry-run failed:\n${JSON.stringify(execDryRun, null, 2)}`);
+  }
+  const execDryRunOrder = execDryRun.plan.map((entry) => entry.ref);
+  if (execDryRunOrder.join(",") !== "company,person_a,updated_person,person_b,person_b_check") {
+    throw new Error(`Exec dry-run order was unexpected:\n${JSON.stringify(execDryRun, null, 2)}`);
+  }
+
+  const execResult = await runSkeemJson(["exec"], {
+    stdin: JSON.stringify(execPlan),
+  });
+  if (!execResult.ok || execResult.operation !== "exec" || !Array.isArray(execResult.plan) || execResult.plan.length !== 5) {
+    throw new Error(`Exec failed:\n${JSON.stringify(execResult, null, 2)}`);
+  }
+
+  const execCompany = execResult.plan.find((entry) => entry.ref === "company");
+  const execPersonAUpdated = execResult.plan.find((entry) => entry.ref === "updated_person");
+  const execPersonBCheck = execResult.plan.find((entry) => entry.ref === "person_b_check");
+  const execCompanyId = execCompany?.data?.id;
+
+  if (execCompany?.data?.name !== "Exec Co") {
+    throw new Error(`Exec did not create the company correctly:\n${JSON.stringify(execResult, null, 2)}`);
+  }
+  if (execPersonAUpdated?.data?.name !== "Exec Alice Updated") {
+    throw new Error(`Exec did not update person A correctly:\n${JSON.stringify(execResult, null, 2)}`);
+  }
+  if (execPersonBCheck?.data?.name !== "Exec Bob" || execPersonBCheck?.data?.company_id !== execCompanyId) {
+    throw new Error(`Exec get step did not resolve person B correctly:\n${JSON.stringify(execResult, null, 2)}`);
+  }
+
+  const execPeopleByName = await runSkeemJson(["find", "people", "--where", "name=Exec Alice Updated"]);
+  if (!execPeopleByName.ok || execPeopleByName.count !== 1) {
+    throw new Error(`Updated exec person was not discoverable:\n${JSON.stringify(execPeopleByName, null, 2)}`);
+  }
+
   process.stdout.write(
     `${JSON.stringify(
       {
@@ -107,11 +349,21 @@ try {
         checks: {
           ls: true,
           cache: true,
+          describe: true,
+          discover: true,
+          relationDryRun: true,
           create: true,
           get: true,
           find: true,
           update: true,
           delete: true,
+          relationAt: true,
+          relationDot: true,
+          relationResolve: true,
+          relationResolveOrCreate: true,
+          relationRollback: true,
+          execDryRun: true,
+          exec: true,
         },
         widgetId,
       },
@@ -232,7 +484,8 @@ async function waitForDirectus() {
   throw new Error(`Timed out waiting for Directus.\nSTDOUT:\n${capturedStdout}\nSTDERR:\n${capturedStderr}`);
 }
 
-async function ensureCollection(collectionName) {
+async function ensureCollection(definition) {
+  const collectionName = definition.name;
   const list = await requestJson("/collections");
   const existsAlready = Array.isArray(list.data) && list.data.some((entry) => entry.collection === collectionName);
   if (existsAlready) {
@@ -255,29 +508,64 @@ async function ensureCollection(collectionName) {
       schema: {
         name: collectionName,
       },
-      fields: [
-        {
-          field: "name",
-          type: "string",
-          meta: {
-            interface: "input",
-            width: "full",
-          },
-          schema: {
-            name: "name",
-            table: collectionName,
-            data_type: "varchar",
-            max_length: 255,
-            is_nullable: true,
-          },
+      fields: definition.fields.map((field) => ({
+        ...field,
+        schema: {
+          ...field.schema,
+          table: collectionName,
         },
-      ],
+      })),
     }),
   });
 
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`Failed to create collection "${collectionName}":\n${body}`);
+  }
+}
+
+async function ensureRelation(definition) {
+  const existing = await requestJson(`/relations/${definition.collectionMany}`).catch(() => ({ data: [] }));
+  const existsAlready = Array.isArray(existing.data) && existing.data.some((entry) => (
+    entry.many_collection === definition.collectionMany &&
+    entry.many_field === definition.fieldMany &&
+    entry.one_collection === definition.collectionOne
+  ));
+
+  if (existsAlready) {
+    return;
+  }
+
+  const response = await fetch(`${baseUrl}/relations`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      collection: definition.collectionMany,
+      field: definition.fieldMany,
+      related_collection: definition.collectionOne,
+      schema: {
+        table: definition.collectionMany,
+        column: definition.fieldMany,
+        foreign_key_table: definition.collectionOne,
+        on_update: "NO ACTION",
+        on_delete: "SET NULL",
+      },
+      meta: {
+        many_collection: definition.collectionMany,
+        many_field: definition.fieldMany,
+        one_collection: definition.collectionOne,
+        one_deselect_action: "nullify",
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Failed to create relation ${definition.collectionMany}.${definition.fieldMany} -> ${definition.collectionOne}:\n${body}`);
   }
 }
 
@@ -333,7 +621,10 @@ async function runSkeemJson(args, options = {}) {
       "--token",
       adminToken,
     ],
-    { cwd: repoRoot },
+    {
+      cwd: repoRoot,
+      ...(options.stdin ? { input: `${options.stdin}\n` } : {}),
+    },
   );
 
   const expectedFailure = options.expectFailure === true;
@@ -362,6 +653,42 @@ function expectCollection(envelope, collectionName) {
   }
 
   return collection;
+}
+
+function stringField(name, options = {}) {
+  return {
+    field: name,
+    type: "string",
+    meta: {
+      interface: "input",
+      width: "full",
+      ...(options.required ? { required: true } : {}),
+    },
+    schema: {
+      name,
+      data_type: "varchar",
+      max_length: 255,
+      is_nullable: options.required ? false : true,
+      ...(options.unique ? { is_unique: true } : {}),
+    },
+  };
+}
+
+function integerField(name, options = {}) {
+  return {
+    field: name,
+    type: "integer",
+    meta: {
+      interface: "input",
+      width: "full",
+      ...(options.required ? { required: true } : {}),
+    },
+    schema: {
+      name,
+      data_type: "integer",
+      is_nullable: options.required ? false : true,
+    },
+  };
 }
 
 async function exists(targetPath) {

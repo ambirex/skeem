@@ -1,17 +1,8 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { CacheMeta, CacheStatus, Collection, Field, Relation, Schema, UniqueConstraint } from "../types/index.js";
-
-interface SerializedSchema {
-  collections: Array<{
-    name: string;
-    primaryKey: string;
-    fields: Field[];
-    relations: Relation[];
-    uniqueConstraints: UniqueConstraint[];
-  }>;
-}
+import { deserializeSchema, serializeSchema } from "../schema/serialization.js";
+import type { CacheMeta, CacheStatus, Schema } from "../types/index.js";
 
 export class SchemaCache {
   private readonly cacheDir: string;
@@ -39,7 +30,7 @@ export class SchemaCache {
   async read(): Promise<Schema | undefined> {
     try {
       const raw = await readFile(this.schemaPath, "utf8");
-      return deserializeSchema(JSON.parse(raw) as SerializedSchema);
+      return deserializeSchema(JSON.parse(raw));
     } catch {
       return undefined;
     }
@@ -65,33 +56,4 @@ export class SchemaCache {
       return { exists: false };
     }
   }
-}
-
-function serializeSchema(schema: Schema): SerializedSchema {
-  return {
-    collections: Array.from(schema.collections.values()).map((collection) => ({
-      name: collection.name,
-      primaryKey: collection.primaryKey,
-      fields: Array.from(collection.fields.values()),
-      relations: collection.relations,
-      uniqueConstraints: collection.uniqueConstraints,
-    })),
-  };
-}
-
-function deserializeSchema(serialized: SerializedSchema): Schema {
-  return {
-    collections: new Map(
-      serialized.collections.map((collection) => [
-        collection.name,
-        {
-          name: collection.name,
-          primaryKey: collection.primaryKey,
-          fields: new Map(collection.fields.map((field) => [field.name, field])),
-          relations: collection.relations,
-          uniqueConstraints: collection.uniqueConstraints,
-        } satisfies Collection,
-      ]),
-    ),
-  };
 }

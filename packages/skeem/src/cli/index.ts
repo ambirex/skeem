@@ -25,6 +25,10 @@ const SHORT_FLAGS: Record<string, string> = {
   v: "verbose",
 };
 
+const SHORT_VALUE_FLAGS: Record<string, string> = {
+  o: "output",
+};
+
 const GLOBAL_VALUE_FLAGS = new Set(["adapter", "url", "token", "profile", "actor", "context", "idempotency-key"]);
 
 export async function runCli(argv: string[]): Promise<void> {
@@ -55,6 +59,24 @@ export async function runCli(argv: string[]): Promise<void> {
           await runtime.get(collection, parsePrimaryKey(id), {
             expand: parsed.flags.get("expand") ?? [],
             cli,
+          }),
+          { json },
+        );
+        return;
+      }
+      case "describe": {
+        const [collection] = rest;
+        if (!collection) {
+          throw new UsageError("Usage: skeem describe <collection>");
+        }
+        writeEnvelope(await runtime.describe(collection), { json });
+        return;
+      }
+      case "discover": {
+        writeEnvelope(
+          await runtime.discover({
+            collections: rest,
+            outputPath: parsed.flags.get("output")?.at(-1),
           }),
           { json },
         );
@@ -172,6 +194,17 @@ function parseArgv(argv: string[]): ParsedArgs {
         booleans.add(expanded);
         continue;
       }
+
+      const expandedValue = SHORT_VALUE_FLAGS[token.slice(1)];
+      if (expandedValue) {
+        const next = argv[index + 1];
+        if (next === undefined || next.startsWith("-")) {
+          throw new UsageError(`Expected a value after ${token}.`);
+        }
+        appendFlag(flags, expandedValue, next);
+        index += 1;
+        continue;
+      }
     }
 
     positionals.push(token);
@@ -206,6 +239,7 @@ function extractFieldEntries(parsed: ParsedArgs, additionalKnownFlags: Set<strin
   const knownFlags = new Set<string>([
     ...GLOBAL_VALUE_FLAGS,
     "where",
+    "output",
     "limit",
     "offset",
     "sort",
@@ -256,6 +290,8 @@ function helpText(): string {
     "",
     "Usage:",
     "  skeem ls [--counts]",
+    "  skeem describe <collection>",
+    "  skeem discover [collection ...] [-o path]",
     "  skeem get <collection> <id> [--expand relation]",
     "  skeem find <collection> [--where field=value] [--limit N] [--offset N] [--sort field]",
     "  skeem create <collection> [--field value]",
