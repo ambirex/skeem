@@ -1,0 +1,18 @@
+services:
+  directus:
+    image: directus/directus:11.17.1
+    ports:
+      - "8055:8055"
+    volumes:
+      - ./directus/database:/directus/database
+      - ./directus/uploads:/directus/uploads
+      - ./directus/extensions:/directus/extensions
+    environment:
+      KEY: "skeem-test-key"
+      SECRET: "skeem-test-secret"
+      ADMIN_EMAIL: "admin@example.com"
+      ADMIN_PASSWORD: "testpassword"
+      ADMIN_TOKEN: "skeem-admin-token"
+      DB_CLIENT: "sqlite3"
+      DB_FILENAME: "/directus/database/test.db"
+      WEBSOCKETS_ENABLED: "true"
