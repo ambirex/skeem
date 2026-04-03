@@ -1,0 +1,28 @@
+{
+  "name": "@skeem/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "skeem": "./dist/bin/skeem.js"
+  },
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node --enable-source-maps --import tsx ./bin/skeem.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@skeem/directus": "0.1.0",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6"
+  }
+}
