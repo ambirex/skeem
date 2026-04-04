@@ -7,6 +7,7 @@ export interface SerializedSchema {
     fields: Field[];
     relations: Relation[];
     uniqueConstraints: UniqueConstraint[];
+    isJunction?: boolean;
   }>;
 }
 
@@ -32,6 +33,7 @@ export interface SchemaDocument {
           type: Relation["type"];
         }
       >;
+      uniqueConstraints?: string[][];
     }
   >;
   relations?: string[];
@@ -66,6 +68,7 @@ export function serializeSchema(schema: Schema): SerializedSchema {
       fields: Array.from(collection.fields.values()),
       relations: collection.relations,
       uniqueConstraints: collection.uniqueConstraints,
+      ...(collection.isJunction ? { isJunction: true } : {}),
     })),
   };
 }
@@ -81,6 +84,7 @@ export function deserializeSchema(serialized: SerializedSchema): Schema {
           fields: new Map(collection.fields.map((field) => [field.name, field])),
           relations: collection.relations,
           uniqueConstraints: collection.uniqueConstraints,
+          ...(collection.isJunction ? { isJunction: true } : {}),
         } satisfies Collection,
       ]),
     ),
@@ -96,7 +100,10 @@ export function schemaToDocument(
 ): SchemaDocument {
   const selectedNames = options?.collections
     ? [...options.collections].sort((left, right) => left.localeCompare(right))
-    : Array.from(schema.collections.keys()).sort((left, right) => left.localeCompare(right));
+    : Array.from(schema.collections.values())
+      .filter((collection) => collection.isJunction !== true)
+      .map((collection) => collection.name)
+      .sort((left, right) => left.localeCompare(right));
   const selected = new Set(selectedNames);
 
   const collections = Object.fromEntries(
@@ -131,11 +138,17 @@ export function schemaToDocument(
           ]),
       );
 
+      const uniqueConstraints = collection.uniqueConstraints
+        .map((constraint) => [...constraint.fields].sort((left, right) => left.localeCompare(right)))
+        .filter((fields) => fields.length > 1)
+        .sort((left, right) => left.join(",").localeCompare(right.join(",")));
+
       return [
         collection.name,
         {
           fields,
           ...(Object.keys(relations).length > 0 ? { relations } : {}),
+          ...(uniqueConstraints.length > 0 ? { uniqueConstraints } : {}),
         },
       ];
     }),

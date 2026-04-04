@@ -18,6 +18,7 @@ const BOOLEAN_FLAGS = new Set([
   "verbose",
   "no-rollback",
   "counts",
+  "allow-destructive",
 ]);
 
 const SHORT_FLAGS: Record<string, string> = {
@@ -82,6 +83,28 @@ export async function runCli(argv: string[]): Promise<void> {
         );
         return;
       }
+      case "diff": {
+        const [schemaPath] = rest;
+        if (!schemaPath) {
+          throw new UsageError("Usage: skeem diff <schema-file> [--direction define|discover]");
+        }
+        writeEnvelope(
+          await runtime.diff(schemaPath, {
+            direction: parseDiffDirection(parsed.flags.get("direction")?.at(-1)),
+            cli,
+          }),
+          { json },
+        );
+        return;
+      }
+      case "define": {
+        const schemaPath = rest[0] ?? parsed.flags.get("from")?.at(-1);
+        if (!schemaPath) {
+          throw new UsageError("Usage: skeem define <schema-file> [--dry-run] [--yes] [--allow-destructive]");
+        }
+        writeEnvelope(await runtime.define(schemaPath, cli), { json });
+        return;
+      }
       case "find": {
         const [collection] = rest;
         if (!collection) {
@@ -99,6 +122,17 @@ export async function runCli(argv: string[]): Promise<void> {
             expand: parsed.flags.get("expand") ?? [],
             cli,
           }),
+          { json },
+        );
+        return;
+      }
+      case "upsert": {
+        const [collection] = rest;
+        if (!collection) {
+          throw new UsageError("Usage: skeem upsert <collection> --match field=value [--field value]");
+        }
+        writeEnvelope(
+          await runtime.upsert(collection, parseWhere(parsed.flags.get("match") ?? []), extractFieldEntries(parsed, new Set(["match"])), cli),
           { json },
         );
         return;
@@ -125,6 +159,22 @@ export async function runCli(argv: string[]): Promise<void> {
           throw new UsageError("Usage: skeem delete <collection> <id>");
         }
         writeEnvelope(await runtime.delete(collection, parsePrimaryKey(id), cli), { json });
+        return;
+      }
+      case "link": {
+        const [sourceInput, relationOrTargetInput, maybeTargetInput] = rest;
+        if (!sourceInput || !relationOrTargetInput) {
+          throw new UsageError("Usage: skeem link <collection:id> <related_collection:id> | skeem link <collection:id> <relation> <target>");
+        }
+        writeEnvelope(await runtime.link(sourceInput, relationOrTargetInput, maybeTargetInput, cli), { json });
+        return;
+      }
+      case "unlink": {
+        const [sourceInput, relationOrTargetInput, maybeTargetInput] = rest;
+        if (!sourceInput || !relationOrTargetInput) {
+          throw new UsageError("Usage: skeem unlink <collection:id> <related_collection:id> | skeem unlink <collection:id> <relation> <target>");
+        }
+        writeEnvelope(await runtime.unlink(sourceInput, relationOrTargetInput, maybeTargetInput, cli), { json });
         return;
       }
       case "exec": {
@@ -227,6 +277,7 @@ function extractGlobalOptions(parsed: ParsedArgs): CliGlobalOptions {
     yes: parsed.booleans.has("yes"),
     verbose: parsed.booleans.has("verbose"),
     noRollback: parsed.booleans.has("no-rollback"),
+    allowDestructive: parsed.booleans.has("allow-destructive"),
     ...(parsed.flags.get("actor")?.at(-1) ? { actor: parsed.flags.get("actor")?.at(-1) } : {}),
     ...(contextRaw ? { context: parseJsonObject(contextRaw) } : {}),
     ...(parsed.flags.get("idempotency-key")?.at(-1)
@@ -239,6 +290,7 @@ function extractFieldEntries(parsed: ParsedArgs, additionalKnownFlags: Set<strin
   const knownFlags = new Set<string>([
     ...GLOBAL_VALUE_FLAGS,
     "where",
+    "match",
     "output",
     "limit",
     "offset",
@@ -284,6 +336,16 @@ function parseJsonObject(value: string): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
+function parseDiffDirection(value?: string): "define" | "discover" {
+  if (value === undefined) {
+    return "define";
+  }
+  if (value === "define" || value === "discover") {
+    return value;
+  }
+  throw new UsageError('Expected --direction to be either "define" or "discover".');
+}
+
 function helpText(): string {
   return [
     "skeem",
@@ -292,11 +354,18 @@ function helpText(): string {
     "  skeem ls [--counts]",
     "  skeem describe <collection>",
     "  skeem discover [collection ...] [-o path]",
+    "  skeem diff <schema-file> [--direction define|discover]",
+    "  skeem define <schema-file> [--dry-run] [--yes] [--allow-destructive]",
     "  skeem get <collection> <id> [--expand relation]",
     "  skeem find <collection> [--where field=value] [--limit N] [--offset N] [--sort field]",
+    "  skeem upsert <collection> --match field=value [--field value]",
     "  skeem create <collection> [--field value]",
     "  skeem update <collection> <id> [--field value]",
     "  skeem delete <collection> <id>",
+    "  skeem link <collection:id> <related_collection:id>",
+    "  skeem link <collection:id> <relation> <target>",
+    "  skeem unlink <collection:id> <related_collection:id>",
+    "  skeem unlink <collection:id> <relation> <target>",
     "  skeem exec < plan.json",
     "  skeem cache <show|clear>",
   ].join("\n");
