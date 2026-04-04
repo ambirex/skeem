@@ -19,6 +19,7 @@ const BOOLEAN_FLAGS = new Set([
   "no-rollback",
   "counts",
   "allow-destructive",
+  "status",
 ]);
 
 const SHORT_FLAGS: Record<string, string> = {
@@ -105,6 +106,10 @@ export async function runCli(argv: string[]): Promise<void> {
         writeEnvelope(await runtime.define(schemaPath, cli), { json });
         return;
       }
+      case "init": {
+        writeEnvelope(await runtime.init(cli, { statusOnly: parsed.booleans.has("status") }), { json });
+        return;
+      }
       case "find": {
         const [collection] = rest;
         if (!collection) {
@@ -156,9 +161,17 @@ export async function runCli(argv: string[]): Promise<void> {
       case "delete": {
         const [collection, id] = rest;
         if (!collection || id === undefined) {
-          throw new UsageError("Usage: skeem delete <collection> <id>");
+          throw new UsageError("Usage: skeem delete <collection> <id> [--hard]");
         }
-        writeEnvelope(await runtime.delete(collection, parsePrimaryKey(id), cli), { json });
+        writeEnvelope(await runtime.delete(collection, parsePrimaryKey(id), cli, { hardDelete: parsed.booleans.has("hard") }), { json });
+        return;
+      }
+      case "restore": {
+        const [collection, id] = rest;
+        if (!collection || id === undefined) {
+          throw new UsageError("Usage: skeem restore <collection> <id>");
+        }
+        writeEnvelope(await runtime.restore(collection, parsePrimaryKey(id), cli), { json });
         return;
       }
       case "link": {
@@ -176,6 +189,45 @@ export async function runCli(argv: string[]): Promise<void> {
         }
         writeEnvelope(await runtime.unlink(sourceInput, relationOrTargetInput, maybeTargetInput, cli), { json });
         return;
+      }
+      case "alias": {
+        const [subcommand, ...aliasArgs] = rest;
+        switch (subcommand) {
+          case "add": {
+            const [targetInput, aliasValue] = aliasArgs;
+            if (!targetInput || !aliasValue) {
+              throw new UsageError("Usage: skeem alias add <collection:id> <alias>");
+            }
+            writeEnvelope(await runtime.aliasAdd(targetInput, aliasValue, cli), { json });
+            return;
+          }
+          case "list": {
+            const [targetInput] = aliasArgs;
+            if (!targetInput) {
+              throw new UsageError("Usage: skeem alias list <collection:id>");
+            }
+            writeEnvelope(await runtime.aliasList(targetInput, cli), { json });
+            return;
+          }
+          case "remove": {
+            const [targetInput, aliasValue] = aliasArgs;
+            if (!targetInput || !aliasValue) {
+              throw new UsageError("Usage: skeem alias remove <collection:id> <alias>");
+            }
+            writeEnvelope(await runtime.aliasRemove(targetInput, aliasValue, cli), { json });
+            return;
+          }
+          case "search": {
+            const [collection, term] = aliasArgs;
+            if (!collection || !term) {
+              throw new UsageError("Usage: skeem alias search <collection> <term>");
+            }
+            writeEnvelope(await runtime.aliasSearch(collection, term, cli), { json });
+            return;
+          }
+          default:
+            throw new UsageError("Usage: skeem alias <add|list|remove|search> ...");
+        }
       }
       case "exec": {
         writeEnvelope(await runtime.exec(await readExecPlanFromStdin(), cli), { json });
@@ -356,16 +408,22 @@ function helpText(): string {
     "  skeem discover [collection ...] [-o path]",
     "  skeem diff <schema-file> [--direction define|discover]",
     "  skeem define <schema-file> [--dry-run] [--yes] [--allow-destructive]",
+    "  skeem init [--status]",
     "  skeem get <collection> <id> [--expand relation]",
     "  skeem find <collection> [--where field=value] [--limit N] [--offset N] [--sort field]",
     "  skeem upsert <collection> --match field=value [--field value]",
     "  skeem create <collection> [--field value]",
     "  skeem update <collection> <id> [--field value]",
-    "  skeem delete <collection> <id>",
+    "  skeem delete <collection> <id> [--hard]",
+    "  skeem restore <collection> <id>",
     "  skeem link <collection:id> <related_collection:id>",
     "  skeem link <collection:id> <relation> <target>",
     "  skeem unlink <collection:id> <related_collection:id>",
     "  skeem unlink <collection:id> <relation> <target>",
+    "  skeem alias add <collection:id> <alias>",
+    "  skeem alias list <collection:id>",
+    "  skeem alias remove <collection:id> <alias>",
+    "  skeem alias search <collection> <term>",
     "  skeem exec < plan.json",
     "  skeem cache <show|clear>",
   ].join("\n");

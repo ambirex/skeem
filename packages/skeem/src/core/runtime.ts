@@ -31,6 +31,14 @@ import {
   parseRecordReference,
   resolveUpsertDecision,
 } from "./data-verbs.js";
+import { getAliasLookupCandidate, normalizeAlias } from "./identity.js";
+import { buildProvenanceRecord } from "./provenance.js";
+import { buildTrashRecord } from "./trash.js";
+import { buildVersionRecord, diffChangedFields } from "./versioning.js";
+import {
+  buildSystemCollectionStatus,
+  getSystemCollectionDefinition,
+} from "../system/tables.js";
 import { toSuccessEnvelope } from "../output/formatter.js";
 import type {
   CliGlobalOptions,
@@ -64,13 +72,29 @@ interface MutationResult {
   created: CreatedRecordRef[];
 }
 
+interface MutationOptions {
+  cli: CliGlobalOptions;
+  provenance?: {
+    operation: string;
+    inputRefs?: unknown;
+  };
+  previousRecord?: EntityRecord;
+}
+
 interface LinkTargetResolution {
   collection: Collection;
   id: PrimaryKey;
   record?: EntityRecord;
 }
 
+const ALIAS_COLLECTION = "skeem_aliases";
+const PROVENANCE_COLLECTION = "skeem_provenance";
+const VERSIONS_COLLECTION = "skeem_versions";
+const TRASH_COLLECTION = "skeem_trash";
+
 export class SkeemRuntime {
+  private readonly ensuredSystemCollections = new Set<string>();
+
   private constructor(
     public readonly config: ResolvedConfig,
     private readonly adapter: SkemAdapter,
@@ -245,6 +269,49 @@ export class SkeemRuntime {
     });
   }
 
+  async init(cli: CliGlobalOptions, options?: { statusOnly?: boolean }): Promise<SuccessEnvelope> {
+    const schema = await this.loadLiveSchema();
+    const status = buildSystemCollectionStatus(schema);
+
+    if (options?.statusOnly) {
+      return toSuccessEnvelope({
+        operation: "init_status",
+        data: status,
+        count: status.length,
+      });
+    }
+
+    const missing = status.filter((entry) => !entry.exists).map((entry) => entry.collection);
+
+    if (cli.dryRun) {
+      return toSuccessEnvelope({
+        operation: "dry_run",
+        action: "init",
+        data: {
+          supported: status.length,
+          missing,
+          status,
+        },
+        count: missing.length,
+      });
+    }
+
+    const created = await this.provisionSystemCollections(missing);
+    const refreshedSchema = created.length > 0 ? await this.loadLiveSchema() : schema;
+    const refreshedStatus = buildSystemCollectionStatus(refreshedSchema);
+
+    return toSuccessEnvelope({
+      operation: "init",
+      action: created.length > 0 ? "applied" : "noop",
+      data: {
+        supported: refreshedStatus.length,
+        applied: created,
+        status: refreshedStatus,
+      },
+      count: refreshedStatus.length,
+    });
+  }
+
   async get(
     collectionInput: string,
     id: PrimaryKey,
@@ -307,7 +374,15 @@ export class SkeemRuntime {
     }
 
     try {
-      const result = await this.createNode(schema, collection, node, ["root"]);
+      const result = await this.createNode(schema, collection, node, ["root"], {
+        cli,
+        provenance: {
+          operation: "create",
+          inputRefs: {
+            fields: this.fieldEntriesToObject(fieldEntries),
+          },
+        },
+      });
       return toSuccessEnvelope({
         operation: result.plan.length > 1 ? "compound_create" : "create",
         collection: collection.name,
@@ -341,7 +416,16 @@ export class SkeemRuntime {
     }
 
     try {
-      const result = await this.updateNode(schema, collection, id, node, ["root"]);
+      const result = await this.updateNode(schema, collection, id, node, ["root"], {
+        cli,
+        provenance: {
+          operation: "update",
+          inputRefs: {
+            id,
+            fields: this.fieldEntriesToObject(fieldEntries),
+          },
+        },
+      });
       return toSuccessEnvelope({
         operation: "update",
         collection: collection.name,
@@ -356,31 +440,81 @@ export class SkeemRuntime {
     }
   }
 
-  async delete(collectionInput: string, id: PrimaryKey, cli: CliGlobalOptions): Promise<SuccessEnvelope> {
+  async delete(
+    collectionInput: string,
+    id: PrimaryKey,
+    cli: CliGlobalOptions,
+    options?: { hardDelete?: boolean },
+  ): Promise<SuccessEnvelope> {
     const schema = await this.loadSchemaForData(cli);
     const collection = this.resolveCollection(schema, collectionInput);
+    const hardDelete = options?.hardDelete === true;
 
     if (cli.dryRun) {
       return toSuccessEnvelope({
         operation: "dry_run",
+        action: hardDelete ? "hard_delete" : "delete",
         collection: collection.name,
         plan: [
           {
             ref: "root",
             operation: "delete",
             collection: collection.name,
-            data: { id },
+            data: {
+              id,
+              mode: hardDelete ? "hard" : "soft",
+              ...(hardDelete ? {} : { trashCollection: TRASH_COLLECTION }),
+            },
           },
         ],
       });
     }
 
     try {
-      await this.adapter.delete(collection.name, id);
+      const result = hardDelete
+        ? await this.hardDeleteRecord(collection, id, cli, { id })
+        : await this.softDeleteRecord(collection, id, cli, { id });
       return toSuccessEnvelope({
         operation: "delete",
+        action: hardDelete ? "hard_deleted" : "trashed",
         collection: collection.name,
-        data: { id },
+        data: result,
+      });
+    } catch (error) {
+      throw this.normalizeError(error, collection.name);
+    }
+  }
+
+  async restore(collectionInput: string, id: PrimaryKey, cli: CliGlobalOptions): Promise<SuccessEnvelope> {
+    const schema = await this.loadSchemaForData(cli);
+    const collection = this.resolveCollection(schema, collectionInput);
+
+    if (cli.dryRun) {
+      return toSuccessEnvelope({
+        operation: "dry_run",
+        action: "restore",
+        collection: collection.name,
+        plan: [
+          {
+            ref: "root",
+            operation: "restore",
+            collection: collection.name,
+            data: {
+              id,
+              trashCollection: TRASH_COLLECTION,
+            },
+          },
+        ],
+      });
+    }
+
+    try {
+      const restored = await this.restoreRecord(collection, id);
+      return toSuccessEnvelope({
+        operation: "restore",
+        action: restored.action,
+        collection: collection.name,
+        data: restored.data,
       });
     } catch (error) {
       throw this.normalizeError(error, collection.name);
@@ -403,7 +537,7 @@ export class SkeemRuntime {
     let decision: ReturnType<typeof resolveUpsertDecision>;
 
     try {
-      const matches = await this.adapter.find(collection.name, match, { limit: 2 });
+      const matches = await this.findIdentityMatches(collection, match);
       decision = resolveUpsertDecision(collection, match, matches);
     } catch (error) {
       throw this.normalizeError(error, collection.name);
@@ -426,7 +560,17 @@ export class SkeemRuntime {
       }
 
       try {
-        const result = await this.createNode(schema, collection, createNode, ["root"]);
+        const result = await this.createNode(schema, collection, createNode, ["root"], {
+          cli,
+          provenance: {
+            operation: "upsert",
+            inputRefs: {
+              action: "created",
+              match,
+              fields: this.fieldEntriesToObject(fieldEntries),
+            },
+          },
+        });
         return toSuccessEnvelope({
           operation: "upsert",
           action: "created",
@@ -459,7 +603,19 @@ export class SkeemRuntime {
     }
 
     try {
-      const result = await this.updateNode(schema, collection, id, node, ["root"]);
+      const result = await this.updateNode(schema, collection, id, node, ["root"], {
+        cli,
+        previousRecord: decision.record,
+        provenance: {
+          operation: "upsert",
+          inputRefs: {
+            action: "updated",
+            id,
+            match,
+            fields: this.fieldEntriesToObject(fieldEntries),
+          },
+        },
+      });
       return toSuccessEnvelope({
         operation: "upsert",
         action: "updated",
@@ -495,6 +651,7 @@ export class SkeemRuntime {
       if (mutation.kind === "m2o") {
         const currentTarget = sourceRecord[relation.field];
         const changed = currentTarget !== target.id;
+        const inputRefs = this.buildRelationInputRefs(sourceCollection.name, sourceReference.id, relation.field, parsed.target);
 
         if (cli.dryRun) {
           return toSuccessEnvelope({
@@ -518,6 +675,13 @@ export class SkeemRuntime {
         const record = await this.adapter.update(sourceCollection.name, sourceReference.id, {
           [mutation.update!.field]: mutation.update!.value,
         });
+        await this.recordProvenance({
+          collection: sourceCollection.name,
+          recordId: sourceReference.id,
+          operation: "link",
+          cli,
+          inputRefs,
+        });
         return toSuccessEnvelope({
           operation: "link",
           action: "linked",
@@ -532,6 +696,7 @@ export class SkeemRuntime {
 
       const existing = await this.adapter.find(mutation.junction!.collection, mutation.junction!.filter, { limit: 1 });
       const changed = existing.length === 0;
+      const inputRefs = this.buildRelationInputRefs(sourceCollection.name, sourceReference.id, relation.field, parsed.target);
 
       if (cli.dryRun) {
         return toSuccessEnvelope({
@@ -561,6 +726,13 @@ export class SkeemRuntime {
       }
 
       const record = await this.adapter.create(mutation.junction!.collection, mutation.junction!.data);
+      await this.recordProvenance({
+        collection: sourceCollection.name,
+        recordId: sourceReference.id,
+        operation: "link",
+        cli,
+        inputRefs,
+      });
       return toSuccessEnvelope({
         operation: "link",
         action: "linked",
@@ -596,6 +768,7 @@ export class SkeemRuntime {
       if (mutation.kind === "m2o") {
         const currentTarget = sourceRecord[relation.field];
         const changed = currentTarget === target.id;
+        const inputRefs = this.buildRelationInputRefs(sourceCollection.name, sourceReference.id, relation.field, parsed.target);
 
         if (cli.dryRun) {
           return toSuccessEnvelope({
@@ -619,6 +792,13 @@ export class SkeemRuntime {
         const record = await this.adapter.update(sourceCollection.name, sourceReference.id, {
           [mutation.update!.field]: mutation.update!.value,
         });
+        await this.recordProvenance({
+          collection: sourceCollection.name,
+          recordId: sourceReference.id,
+          operation: "unlink",
+          cli,
+          inputRefs,
+        });
         return toSuccessEnvelope({
           operation: "unlink",
           action: "unlinked",
@@ -633,6 +813,7 @@ export class SkeemRuntime {
 
       const existing = await this.adapter.find(mutation.junction!.collection, mutation.junction!.filter, { limit: 100 });
       const removed = existing.length;
+      const inputRefs = this.buildRelationInputRefs(sourceCollection.name, sourceReference.id, relation.field, parsed.target);
 
       if (cli.dryRun) {
         return toSuccessEnvelope({
@@ -671,6 +852,13 @@ export class SkeemRuntime {
       for (const row of existing) {
         await this.adapter.delete(mutation.junction!.collection, this.recordPrimaryKey(junctionCollection, row));
       }
+      await this.recordProvenance({
+        collection: sourceCollection.name,
+        recordId: sourceReference.id,
+        operation: "unlink",
+        cli,
+        inputRefs,
+      });
 
       return toSuccessEnvelope({
         operation: "unlink",
@@ -685,6 +873,136 @@ export class SkeemRuntime {
     } catch (error) {
       throw this.normalizeError(error, sourceCollection.name);
     }
+  }
+
+  async aliasAdd(targetInput: string, alias: string, cli: CliGlobalOptions): Promise<SuccessEnvelope> {
+    const normalized = normalizeAlias(alias);
+    if (normalized.length === 0) {
+      throw new UsageError("Alias must contain letters or numbers after normalization.");
+    }
+
+    const schema = await this.loadLiveSchema();
+    const target = parseRecordReference(targetInput, "record");
+    const collection = this.resolveCollection(schema, target.collectionInput);
+
+    try {
+      await this.adapter.get(collection.name, target.id);
+    } catch (error) {
+      throw this.normalizeError(error, collection.name);
+    }
+
+    await this.ensureAliasStore();
+
+    try {
+      const existing = await this.findAliasRows({
+        collection: collection.name,
+        alias_normalized: normalized,
+      }, { limit: 100 });
+      const sameRecord = existing.find((row) => String(row.record_id ?? "") === String(target.id));
+      if (sameRecord) {
+        return toSuccessEnvelope({
+          operation: "alias_add",
+          action: "exists",
+          collection: collection.name,
+          data: sameRecord,
+        });
+      }
+      if (existing.length > 0) {
+        throw new DuplicateError(ALIAS_COLLECTION, ["collection", "alias_normalized"]);
+      }
+
+      const record = await this.adapter.create(ALIAS_COLLECTION, {
+        collection: collection.name,
+        record_id: String(target.id),
+        alias,
+        alias_normalized: normalized,
+        ...(cli.actor ? { created_by: cli.actor } : {}),
+        created_at: new Date().toISOString(),
+      });
+
+      return toSuccessEnvelope({
+        operation: "alias_add",
+        action: "added",
+        collection: collection.name,
+        data: record,
+      });
+    } catch (error) {
+      throw this.normalizeError(error, ALIAS_COLLECTION);
+    }
+  }
+
+  async aliasList(targetInput: string, cli: CliGlobalOptions): Promise<SuccessEnvelope> {
+    const schema = await this.loadSchemaForData(cli);
+    const target = parseRecordReference(targetInput, "record");
+    const collection = this.resolveCollection(schema, target.collectionInput);
+    const rows = await this.findAliasRows({
+      collection: collection.name,
+      record_id: String(target.id),
+    }, { limit: 1000 });
+    const data = [...rows].sort((left, right) => String(left.alias ?? "").localeCompare(String(right.alias ?? "")));
+
+    return toSuccessEnvelope({
+      operation: "alias_list",
+      collection: collection.name,
+      data,
+      count: data.length,
+    });
+  }
+
+  async aliasRemove(targetInput: string, alias: string, cli: CliGlobalOptions): Promise<SuccessEnvelope> {
+    const normalized = normalizeAlias(alias);
+    if (normalized.length === 0) {
+      throw new UsageError("Alias must contain letters or numbers after normalization.");
+    }
+
+    const schema = await this.loadSchemaForData(cli);
+    const target = parseRecordReference(targetInput, "record");
+    const collection = this.resolveCollection(schema, target.collectionInput);
+    const rows = await this.findAliasRows({
+      collection: collection.name,
+      record_id: String(target.id),
+      alias_normalized: normalized,
+    }, { limit: 100 });
+
+    for (const row of rows) {
+      const aliasId = row.id;
+      if (typeof aliasId !== "string" && typeof aliasId !== "number") {
+        continue;
+      }
+      await this.adapter.delete(ALIAS_COLLECTION, aliasId);
+    }
+
+    return toSuccessEnvelope({
+      operation: "alias_remove",
+      action: rows.length > 0 ? "removed" : "not_found",
+      collection: collection.name,
+      data: {
+        alias,
+        alias_normalized: normalized,
+        removed: rows.length,
+      },
+    });
+  }
+
+  async aliasSearch(collectionInput: string, term: string, cli: CliGlobalOptions): Promise<SuccessEnvelope> {
+    const normalized = normalizeAlias(term);
+    if (normalized.length === 0) {
+      throw new UsageError("Alias search term must contain letters or numbers after normalization.");
+    }
+
+    const schema = await this.loadSchemaForData(cli);
+    const collection = this.resolveCollection(schema, collectionInput);
+    const rows = await this.findAliasRows({ collection: collection.name }, { limit: 1000 });
+    const data = rows
+      .filter((row) => typeof row.alias_normalized === "string" && row.alias_normalized.includes(normalized))
+      .sort((left, right) => String(left.alias ?? "").localeCompare(String(right.alias ?? "")));
+
+    return toSuccessEnvelope({
+      operation: "alias_search",
+      collection: collection.name,
+      data,
+      count: data.length,
+    });
   }
 
   async exec(planInput: ExecPlanInput, cli: CliGlobalOptions): Promise<SuccessEnvelope> {
@@ -710,7 +1028,15 @@ export class SkeemRuntime {
         switch (resolved.op) {
           case "create": {
             result = await this.adapter.create(collection, resolved.data ?? {});
-            created.push({ collection, id: this.recordPrimaryKey(requireCollection(schema, collection), result) });
+            const recordId = this.recordPrimaryKey(requireCollection(schema, collection), result);
+            created.push({ collection, id: recordId });
+            await this.recordProvenance({
+              collection,
+              recordId,
+              operation: "create",
+              cli,
+              inputRefs: operation,
+            });
             break;
           }
           case "get": {
@@ -732,27 +1058,32 @@ export class SkeemRuntime {
             if (resolved.id === undefined) {
               throw new UsageError(`Exec operation "${resolved.ref}" is missing an id.`);
             }
-            result = await this.adapter.update(collection, resolved.id, resolved.data ?? {});
+            result = await this.applyAuditedUpdate(requireCollection(schema, collection), resolved.id, resolved.data ?? {}, {
+              cli,
+              provenance: {
+                operation: "update",
+                inputRefs: operation,
+              },
+            });
             break;
           }
           case "delete": {
             if (resolved.id === undefined) {
               throw new UsageError(`Exec operation "${resolved.ref}" is missing an id.`);
             }
-            await this.adapter.delete(collection, resolved.id);
-            result = { id: resolved.id };
+            result = await this.softDeleteRecord(requireCollection(schema, collection), resolved.id, cli, operation);
             break;
           }
           case "upsert": {
-            result = await this.executeExecUpsert(schema, resolved);
+            result = await this.executeExecUpsert(schema, resolved, cli, operation);
             break;
           }
           case "link": {
-            result = await this.executeExecRelationMutation(schema, resolved, "link");
+            result = await this.executeExecRelationMutation(schema, resolved, "link", cli, operation);
             break;
           }
           case "unlink": {
-            result = await this.executeExecRelationMutation(schema, resolved, "unlink");
+            result = await this.executeExecRelationMutation(schema, resolved, "unlink", cli, operation);
             break;
           }
         }
@@ -794,7 +1125,13 @@ export class SkeemRuntime {
     });
   }
 
-  private async createNode(schema: Schema, collection: Collection, node: InputNode, trail: string[]): Promise<MutationResult> {
+  private async createNode(
+    schema: Schema,
+    collection: Collection,
+    node: InputNode,
+    trail: string[],
+    options: MutationOptions,
+  ): Promise<MutationResult> {
     const data: Record<string, unknown> = { ...node.fields };
     const plan: OperationLogEntry[] = [];
     const created: CreatedRecordRef[] = [];
@@ -802,7 +1139,7 @@ export class SkeemRuntime {
     try {
       for (const [segment, childNode] of Object.entries(node.children)) {
         const relation = resolveRelation(collection, segment);
-        const childResult = await this.resolveRelationInput(schema, relation, childNode, [...trail, segment]);
+        const childResult = await this.resolveRelationInput(schema, relation, childNode, [...trail, segment], options.cli);
         data[relation.field] = childResult.id;
         plan.push(...childResult.plan);
         created.push(...childResult.created);
@@ -810,13 +1147,20 @@ export class SkeemRuntime {
 
       const record = await this.adapter.create(collection.name, data);
       const id = this.recordPrimaryKey(collection, record);
+      created.push({ collection: collection.name, id });
+      await this.recordProvenance({
+        collection: collection.name,
+        recordId: id,
+        operation: options.provenance?.operation ?? "create",
+        cli: options.cli,
+        inputRefs: options.provenance?.inputRefs ?? this.describeNodeInput(node, trail),
+      });
       plan.push({
         ref: makeRef(trail),
         operation: "create",
         collection: collection.name,
         data: record,
       });
-      created.push({ collection: collection.name, id });
       return { record, plan, created };
     } catch (error) {
       throw new MutationFailureError(this.normalizeError(error, collection.name), created);
@@ -829,6 +1173,7 @@ export class SkeemRuntime {
     id: PrimaryKey,
     node: InputNode,
     trail: string[],
+    options: MutationOptions,
   ): Promise<MutationResult> {
     const created: CreatedRecordRef[] = [];
     const data: Record<string, unknown> = { ...node.fields };
@@ -837,13 +1182,20 @@ export class SkeemRuntime {
     try {
       for (const [segment, childNode] of Object.entries(node.children)) {
         const relation = resolveRelation(collection, segment);
-        const childResult = await this.resolveRelationInput(schema, relation, childNode, [...trail, segment]);
+        const childResult = await this.resolveRelationInput(schema, relation, childNode, [...trail, segment], options.cli);
         data[relation.field] = childResult.id;
         created.push(...childResult.created);
         plan.push(...childResult.plan);
       }
 
-      const record = await this.adapter.update(collection.name, id, data);
+      const record = await this.applyAuditedUpdate(collection, id, data, {
+        cli: options.cli,
+        previousRecord: options.previousRecord,
+        provenance: {
+          operation: options.provenance?.operation ?? "update",
+          inputRefs: options.provenance?.inputRefs ?? this.describeNodeInput(node, trail, { id }),
+        },
+      });
       plan.push({
         ref: makeRef(trail),
         operation: "update",
@@ -866,6 +1218,7 @@ export class SkeemRuntime {
     relation: Relation,
     node: InputNode,
     trail: string[],
+    cli: CliGlobalOptions,
   ): Promise<{ id: PrimaryKey; plan: OperationLogEntry[]; created: CreatedRecordRef[] }> {
     const targetCollection = requireCollection(schema, relation.relatedCollection);
 
@@ -893,7 +1246,7 @@ export class SkeemRuntime {
         throw new UsageError(`Only "??" supports fallback fields for "${trail.join(".")}".`);
       }
 
-      const record = await this.adapter.findOne(targetCollection.name, node.selector.filter);
+      const record = await this.resolveIdentityRecord(targetCollection, node.selector.filter);
       return {
         id: this.recordPrimaryKey(targetCollection, record),
         plan: [
@@ -911,7 +1264,7 @@ export class SkeemRuntime {
 
     if (node.selector?.kind === "resolveOrCreate") {
       try {
-        const record = await this.adapter.findOne(targetCollection.name, node.selector.filter);
+        const record = await this.resolveIdentityRecord(targetCollection, node.selector.filter);
         return {
           id: this.recordPrimaryKey(targetCollection, record),
           plan: [
@@ -937,7 +1290,7 @@ export class SkeemRuntime {
           },
           children: node.children,
         };
-        const created = await this.createNode(schema, targetCollection, createNode, trail);
+        const created = await this.createNode(schema, targetCollection, createNode, trail, { cli });
         return {
           id: this.recordPrimaryKey(targetCollection, created.record),
           plan: created.plan,
@@ -946,7 +1299,7 @@ export class SkeemRuntime {
       }
     }
 
-    const created = await this.createNode(schema, targetCollection, node, trail);
+    const created = await this.createNode(schema, targetCollection, node, trail, { cli });
     return {
       id: this.recordPrimaryKey(targetCollection, created.record),
       plan: created.plan,
@@ -1109,7 +1462,7 @@ export class SkeemRuntime {
       }
 
       try {
-        const record = await this.adapter.findOne(targetCollection.name, parsed.filter);
+        const record = await this.resolveIdentityRecord(targetCollection, parsed.filter);
         return {
           collection: targetCollection,
           id: this.recordPrimaryKey(targetCollection, record),
@@ -1203,6 +1556,452 @@ export class SkeemRuntime {
     };
   }
 
+  private async resolveIdentityRecord(collection: Collection, filter: Filter): Promise<EntityRecord> {
+    const matches = await this.findIdentityMatches(collection, filter);
+    if (matches.length === 0) {
+      throw new NotFoundError(collection.name, undefined, filter);
+    }
+    if (matches.length > 1) {
+      throw new AmbiguousError(collection.name, filter, matches.length);
+    }
+    return matches[0]!;
+  }
+
+  private async findIdentityMatches(collection: Collection, filter: Filter): Promise<EntityRecord[]> {
+    const directMatches = await this.adapter.find(collection.name, filter, { limit: 2 });
+    if (directMatches.length > 0) {
+      return directMatches;
+    }
+
+    const candidate = getAliasLookupCandidate(filter);
+    if (!candidate) {
+      return [];
+    }
+
+    const aliasRows = await this.findAliasRows({
+      collection: collection.name,
+      alias_normalized: candidate.normalized,
+    }, { limit: 25 });
+    const recordIds = Array.from(new Set(
+      aliasRows
+        .map((row) => row.record_id)
+        .filter((value): value is string | number => typeof value === "string" || typeof value === "number"),
+    ));
+
+    const matches: EntityRecord[] = [];
+    for (const recordId of recordIds) {
+      try {
+        matches.push(await this.adapter.get(collection.name, recordId));
+      } catch (error) {
+        const normalized = this.normalizeError(error, collection.name);
+        if (normalized instanceof NotFoundError) {
+          continue;
+        }
+        throw normalized;
+      }
+
+      if (matches.length >= 2) {
+        break;
+      }
+    }
+
+    return matches;
+  }
+
+  private async ensureAliasStore(): Promise<void> {
+    await this.ensureSystemCollection(ALIAS_COLLECTION);
+  }
+
+  private async ensureProvenanceStore(): Promise<void> {
+    await this.ensureSystemCollection(PROVENANCE_COLLECTION);
+  }
+
+  private async ensureVersionStore(): Promise<void> {
+    await this.ensureSystemCollection(VERSIONS_COLLECTION);
+  }
+
+  private async ensureTrashStore(): Promise<void> {
+    await this.ensureSystemCollection(TRASH_COLLECTION);
+  }
+
+  private async findAliasRows(
+    filter: Filter,
+    options?: { limit?: number },
+  ): Promise<EntityRecord[]> {
+    try {
+      return await this.adapter.find(ALIAS_COLLECTION, filter, {
+        ...(options?.limit !== undefined ? { limit: options.limit } : {}),
+      });
+    } catch (error) {
+      if (
+        isDirectusRequestError(error) &&
+        (error.status === 404 || (error.status === 403 && /does not exist/i.test(error.message)))
+      ) {
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  private async findTrashRows(
+    filter: Filter,
+    options?: { limit?: number; sort?: string },
+  ): Promise<EntityRecord[]> {
+    try {
+      return await this.adapter.find(TRASH_COLLECTION, filter, {
+        ...(options?.limit !== undefined ? { limit: options.limit } : {}),
+        ...(options?.sort ? { sort: options.sort } : {}),
+      });
+    } catch (error) {
+      if (
+        isDirectusRequestError(error) &&
+        (error.status === 404 || (error.status === 403 && /does not exist/i.test(error.message)))
+      ) {
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  private async provisionSystemCollections(names: string[]): Promise<string[]> {
+    if (names.length === 0) {
+      return [];
+    }
+
+    if (!this.adapter.createCollection) {
+      throw new UsageError(`Adapter "${this.adapter.name}" does not support system table creation.`);
+    }
+
+    const schema = await this.loadCurrentSchema({ writeCache: true });
+    const created: string[] = [];
+
+    for (const name of names) {
+      if (schema.collections.has(name)) {
+        this.ensuredSystemCollections.add(name);
+        continue;
+      }
+
+      const definition = getSystemCollectionDefinition(name);
+      if (!definition) {
+        throw new UsageError(`Unsupported system table "${name}".`);
+      }
+
+      await this.adapter.createCollection({
+        name: definition.name,
+        fields: definition.fields.map((field) => ({ ...field })),
+      });
+      created.push(name);
+      this.ensuredSystemCollections.add(name);
+    }
+
+    if (created.length > 0) {
+      await this.loadCurrentSchema({ writeCache: true });
+    }
+
+    return created;
+  }
+
+  private async ensureSystemCollection(name: string): Promise<void> {
+    if (this.ensuredSystemCollections.has(name)) {
+      return;
+    }
+
+    const schema = await this.loadCurrentSchema({ writeCache: true });
+    if (schema.collections.has(name)) {
+      this.ensuredSystemCollections.add(name);
+      return;
+    }
+
+    await this.provisionSystemCollections([name]);
+    this.ensuredSystemCollections.add(name);
+  }
+
+  private async recordProvenance(input: {
+    collection: string;
+    recordId: PrimaryKey;
+    operation: string;
+    cli: CliGlobalOptions;
+    inputRefs?: unknown;
+  }): Promise<EntityRecord> {
+    await this.ensureProvenanceStore();
+    return this.adapter.create(PROVENANCE_COLLECTION, buildProvenanceRecord({
+      collection: input.collection,
+      recordId: input.recordId,
+      operation: input.operation,
+      cli: input.cli,
+      config: this.config,
+      inputRefs: input.inputRefs,
+    }));
+  }
+
+  private async recordVersion(input: {
+    collection: Collection;
+    recordId: PrimaryKey;
+    snapshot: EntityRecord;
+    record: EntityRecord;
+    provenance?: EntityRecord;
+  }): Promise<EntityRecord | null> {
+    const changedFields = diffChangedFields(input.snapshot, input.record);
+    if (changedFields.length === 0) {
+      return null;
+    }
+
+    await this.ensureVersionStore();
+    const latestVersion = await this.readLatestVersion(input.collection.name, input.recordId);
+    const provenanceId = this.extractSystemRecordId(input.provenance);
+
+    return this.adapter.create(VERSIONS_COLLECTION, buildVersionRecord({
+      collection: input.collection.name,
+      recordId: input.recordId,
+      version: latestVersion + 1,
+      snapshot: input.snapshot,
+      changedFields,
+      ...(provenanceId !== undefined ? { provenanceId } : {}),
+    }));
+  }
+
+  private async recordTrash(input: {
+    collection: Collection;
+    recordId: PrimaryKey;
+    snapshot: EntityRecord;
+    cli: CliGlobalOptions;
+    provenance?: EntityRecord;
+  }): Promise<EntityRecord> {
+    await this.ensureTrashStore();
+    const provenanceId = this.extractSystemRecordId(input.provenance);
+    return this.adapter.create(TRASH_COLLECTION, buildTrashRecord({
+      collection: input.collection.name,
+      recordId: input.recordId,
+      snapshot: input.snapshot,
+      cli: input.cli,
+      config: this.config,
+      ...(provenanceId !== undefined ? { provenanceId } : {}),
+    }));
+  }
+
+  private async readLatestVersion(collection: string, recordId: PrimaryKey): Promise<number> {
+    const rows = await this.adapter.find(VERSIONS_COLLECTION, {
+      collection,
+      record_id: String(recordId),
+    }, {
+      limit: 1,
+      sort: "-version",
+    });
+    const value = rows[0]?.version;
+    if (typeof value === "number") {
+      return value;
+    }
+    if (typeof value === "string" && value.length > 0) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return 0;
+  }
+
+  private async applyAuditedUpdate(
+    collection: Collection,
+    id: PrimaryKey,
+    data: Record<string, unknown>,
+    options: {
+      cli: CliGlobalOptions;
+      provenance: {
+        operation: string;
+        inputRefs?: unknown;
+      };
+      previousRecord?: EntityRecord;
+    },
+  ): Promise<EntityRecord> {
+    const previousRecord = options.previousRecord ?? await this.adapter.get(collection.name, id);
+    const record = await this.adapter.update(collection.name, id, data);
+    const provenance = await this.recordProvenance({
+      collection: collection.name,
+      recordId: id,
+      operation: options.provenance.operation,
+      cli: options.cli,
+      inputRefs: options.provenance.inputRefs,
+    });
+    await this.recordVersion({
+      collection,
+      recordId: id,
+      snapshot: previousRecord,
+      record,
+      provenance,
+    });
+    return record;
+  }
+
+  private async softDeleteRecord(
+    collection: Collection,
+    id: PrimaryKey,
+    cli: CliGlobalOptions,
+    inputRefs?: unknown,
+  ): Promise<Record<string, unknown>> {
+    const snapshot = await this.adapter.get(collection.name, id);
+    let provenance: EntityRecord | undefined;
+    let trash: EntityRecord | undefined;
+
+    try {
+      provenance = await this.recordProvenance({
+        collection: collection.name,
+        recordId: id,
+        operation: "delete",
+        cli,
+        inputRefs,
+      });
+      trash = await this.recordTrash({
+        collection,
+        recordId: id,
+        snapshot,
+        cli,
+        ...(provenance ? { provenance } : {}),
+      });
+      await this.adapter.delete(collection.name, id);
+    } catch (error) {
+      await this.cleanupSystemRecordBestEffort(TRASH_COLLECTION, trash);
+      await this.cleanupSystemRecordBestEffort(PROVENANCE_COLLECTION, provenance);
+      throw error;
+    }
+
+    return {
+      id,
+      trashed: true,
+      ...(this.extractSystemRecordId(trash) !== undefined ? { trashId: this.extractSystemRecordId(trash) } : {}),
+    };
+  }
+
+  private async hardDeleteRecord(
+    collection: Collection,
+    id: PrimaryKey,
+    cli: CliGlobalOptions,
+    inputRefs?: unknown,
+  ): Promise<Record<string, unknown>> {
+    await this.adapter.delete(collection.name, id);
+    await this.recordProvenance({
+      collection: collection.name,
+      recordId: id,
+      operation: "delete",
+      cli,
+      inputRefs,
+    });
+    return {
+      id,
+      trashed: false,
+    };
+  }
+
+  private async restoreRecord(
+    collection: Collection,
+    id: PrimaryKey,
+  ): Promise<{ action: string; data: Record<string, unknown> }> {
+    const trashRows = await this.findTrashRows({
+      collection: collection.name,
+      record_id: String(id),
+    }, {
+      limit: 1,
+      sort: "-deleted_at",
+    });
+    const trash = trashRows[0];
+    if (!trash) {
+      throw new NotFoundError(TRASH_COLLECTION, id, {
+        collection: collection.name,
+        record_id: String(id),
+      });
+    }
+
+    const existing = await this.adapter.find(collection.name, {
+      [collection.primaryKey]: id,
+    }, {
+      limit: 1,
+    });
+    if (existing.length > 0) {
+      throw new ValidationError(collection.name, collection.primaryKey, `Cannot restore "${collection.name}" because id "${id}" is already in use.`);
+    }
+
+    const snapshot = trash.snapshot;
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+      throw new ValidationError(TRASH_COLLECTION, "snapshot", `Trash entry for "${collection.name}" does not contain a restorable snapshot.`);
+    }
+
+    const record = await this.adapter.create(collection.name, snapshot as Record<string, unknown>);
+    let action = "restored";
+    try {
+      await this.cleanupSystemRecord(TRASH_COLLECTION, trash);
+    } catch {
+      action = "restored_with_residual_trash";
+    }
+
+    return {
+      action,
+      data: {
+        id,
+        record,
+      },
+    };
+  }
+
+  private extractSystemRecordId(record?: EntityRecord): string | number | undefined {
+    if (!record) {
+      return undefined;
+    }
+    const id = record.id;
+    return typeof id === "string" || typeof id === "number" ? id : undefined;
+  }
+
+  private async cleanupSystemRecord(collection: string, record?: EntityRecord): Promise<void> {
+    const id = this.extractSystemRecordId(record);
+    if (id === undefined) {
+      return;
+    }
+    await this.adapter.delete(collection, id);
+  }
+
+  private async cleanupSystemRecordBestEffort(collection: string, record?: EntityRecord): Promise<void> {
+    try {
+      await this.cleanupSystemRecord(collection, record);
+    } catch {
+      // Best-effort cleanup only.
+    }
+  }
+
+  private describeNodeInput(
+    node: InputNode,
+    trail: string[],
+    extras?: Record<string, unknown>,
+  ): Record<string, unknown> {
+    return {
+      trail: trail.join("."),
+      fields: node.fields,
+      ...(node.selector ? { selector: node.selector } : {}),
+      ...(Object.keys(node.children).length > 0 ? { relations: Object.keys(node.children) } : {}),
+      ...(extras ?? {}),
+    };
+  }
+
+  private buildRelationInputRefs(
+    collection: string,
+    id: PrimaryKey,
+    relation: string,
+    target: ReturnType<typeof parseLinkArguments>["target"],
+  ): Record<string, unknown> {
+    return {
+      source: {
+        collection,
+        id,
+      },
+      relation,
+      target: {
+        ...(target.collectionInput ? { collection: target.collectionInput } : {}),
+        ...(target.kind === "resolve" ? { filter: target.filter } : { id: target.id }),
+      },
+    };
+  }
+
+  private fieldEntriesToObject(fieldEntries: Array<[string, string]>): Record<string, string> {
+    return Object.fromEntries(fieldEntries);
+  }
+
   private previewExecOperation(schema: Schema, operation: ExecOperationInput): OperationLogEntry {
     const collection = this.resolveCollection(schema, operation.collection);
 
@@ -1262,20 +2061,40 @@ export class SkeemRuntime {
     }
   }
 
-  private async executeExecUpsert(schema: Schema, operation: ExecOperationInput): Promise<Record<string, unknown>> {
+  private async executeExecUpsert(
+    schema: Schema,
+    operation: ExecOperationInput,
+    cli: CliGlobalOptions,
+    inputRefs: unknown,
+  ): Promise<Record<string, unknown>> {
     const collection = this.resolveCollection(schema, operation.collection);
     try {
       const match = this.expectExecFilter(operation.match, `Exec operation "${operation.ref}" is missing a match object.`);
       const data = this.expectExecRecordObject(operation.data ?? {}, `Exec operation "${operation.ref}" data must be an object.`);
-      const matches = await this.adapter.find(collection.name, match, { limit: 2 });
+      const matches = await this.findIdentityMatches(collection, match);
       const decision = resolveUpsertDecision(collection, match, matches);
 
       if (decision.kind === "create") {
-        return this.adapter.create(collection.name, mergeUpsertCreateData(data, match, collection.name));
+        const record = await this.adapter.create(collection.name, mergeUpsertCreateData(data, match, collection.name));
+        await this.recordProvenance({
+          collection: collection.name,
+          recordId: this.recordPrimaryKey(collection, record),
+          operation: "upsert",
+          cli,
+          inputRefs,
+        });
+        return record;
       }
 
       const id = this.recordPrimaryKey(collection, decision.record);
-      return this.adapter.update(collection.name, id, data);
+      return this.applyAuditedUpdate(collection, id, data, {
+        cli,
+        previousRecord: decision.record,
+        provenance: {
+          operation: "upsert",
+          inputRefs,
+        },
+      });
     } catch (error) {
       throw this.normalizeError(error, collection.name);
     }
@@ -1285,6 +2104,8 @@ export class SkeemRuntime {
     schema: Schema,
     operation: ExecOperationInput,
     mode: "link" | "unlink",
+    cli: CliGlobalOptions,
+    inputRefs: unknown,
   ): Promise<Record<string, unknown>> {
     const sourceCollection = this.resolveCollection(schema, operation.collection);
     try {
@@ -1323,6 +2144,13 @@ export class SkeemRuntime {
         const record = await this.adapter.update(sourceCollection.name, operation.id, {
           [mutation.update!.field]: mutation.update!.value,
         });
+        await this.recordProvenance({
+          collection: sourceCollection.name,
+          recordId: operation.id,
+          operation: mode,
+          cli,
+          inputRefs,
+        });
         return {
           ...this.describeRelationMutation(
             mode === "link" ? "linked" : "unlinked",
@@ -1346,6 +2174,13 @@ export class SkeemRuntime {
         }
 
         const record = await this.adapter.create(mutation.junction!.collection, mutation.junction!.data);
+        await this.recordProvenance({
+          collection: sourceCollection.name,
+          recordId: operation.id,
+          operation: mode,
+          cli,
+          inputRefs,
+        });
         return {
           ...this.describeRelationMutation("linked", true, sourceCollection, operation.id, relation, target, mutation.junction!.collection),
           record,
@@ -1363,6 +2198,13 @@ export class SkeemRuntime {
       for (const row of existing) {
         await this.adapter.delete(mutation.junction!.collection, this.recordPrimaryKey(junctionCollection, row));
       }
+      await this.recordProvenance({
+        collection: sourceCollection.name,
+        recordId: operation.id,
+        operation: mode,
+        cli,
+        inputRefs,
+      });
 
       return {
         ...this.describeRelationMutation("unlinked", true, sourceCollection, operation.id, relation, target, mutation.junction!.collection),

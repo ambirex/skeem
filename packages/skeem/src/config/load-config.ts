@@ -7,6 +7,7 @@ import type { CliGlobalOptions, ResolvedConfig } from "../types/index.js";
 
 interface RawConfig {
   adapter?: string;
+  actor?: string;
   connection?: {
     url?: string;
     token?: string;
@@ -63,6 +64,7 @@ export async function loadConfig(startDir: string, cli: CliGlobalOptions): Promi
     ...((localConfigPath ?? (await exists(globalConfigPath) ? globalConfigPath : undefined))
       ? { configPath: localConfigPath ?? globalConfigPath }
       : {}),
+    ...(resolved.actor ? { actor: resolved.actor } : {}),
     schema: {
       aliases: resolved.schema?.aliases ?? {},
       exclude: resolved.schema?.exclude ?? ["directus_*"],
@@ -114,6 +116,7 @@ function mergeConfigs(base: RawConfig, override: RawConfig): RawConfig {
   return {
     ...base,
     ...override,
+    ...(override.actor ?? base.actor ? { actor: override.actor ?? base.actor } : {}),
     connection: {
       ...(base.connection ?? {}),
       ...(override.connection ?? {}),
@@ -145,6 +148,7 @@ function mergeConfigs(base: RawConfig, override: RawConfig): RawConfig {
 function applyEnvOverrides(config: RawConfig): RawConfig {
   return mergeConfigs(config, {
     ...(process.env.SKEEM_ADAPTER ? { adapter: process.env.SKEEM_ADAPTER } : {}),
+    ...(process.env.SKEEM_ACTOR ? { actor: process.env.SKEEM_ACTOR } : {}),
     ...(process.env.SKEEM_URL || process.env.SKEEM_TOKEN
       ? {
           connection: {
@@ -159,6 +163,7 @@ function applyEnvOverrides(config: RawConfig): RawConfig {
 function applyCliOverrides(config: RawConfig, cli: CliGlobalOptions): RawConfig {
   return mergeConfigs(config, {
     ...(cli.adapter ? { adapter: cli.adapter } : {}),
+    ...(cli.actor ? { actor: cli.actor } : {}),
     ...(cli.url || cli.token
       ? {
           connection: {

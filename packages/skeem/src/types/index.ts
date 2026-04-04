@@ -177,6 +177,7 @@ export interface ResolvedConfig {
   profile?: string;
   rootDir: string;
   configPath?: string;
+  actor?: string;
   schema: {
     aliases: Record<string, string>;
     exclude: string[];

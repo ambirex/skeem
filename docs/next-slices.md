@@ -21,7 +21,12 @@ The goal of the original next slices was to close the biggest Phase 1 gaps befor
 - Completed: Slice 7: Schema Mutation Expansion
 - Completed: Slice 8: Higher-Level Data Verbs
 - Completed: Slice 9: Exec Verb Parity
-- Next logical step: Slice 10: Identity and Alias Resolution
+- Completed: Slice 10: Identity and Alias Resolution
+- Completed: Slice 11: System Initialization and Provisioning
+- Completed: Slice 12: Provenance Tracking Foundation
+- Completed: Slice 13: Version History Foundation
+- Completed: Slice 14: Soft Delete and Restore Foundation
+- Next logical step: Slice 15: Claims and Coordination Foundation
 
 ## Slice 1: Discovery Completeness
 
@@ -466,7 +471,7 @@ The CLI now has higher-level verbs, but agent workflows still need to drop back 
 
 ## Slice 10: Identity and Alias Resolution
 
-Status: next
+Status: completed
 
 ### Why now
 
@@ -495,6 +500,295 @@ The higher-level relation verbs are now in place, but they still only resolve ag
 
 - The resolution-oriented verbs behave the way the spec describes when a record is identified by a stable alias instead of a primary field value
 
+### Completion Notes
+
+- Added a shared alias normalization and lookup path for runtime resolution verbs
+- Alias fallback now checks direct field matches first, then normalized aliases in `skeem_aliases`
+- Integrated alias-aware resolution into:
+- `?`
+- `??`
+- `upsert`
+- `link`
+- `unlink`
+- Added lightweight alias management commands:
+- `skeem alias add`
+- `skeem alias list`
+- `skeem alias remove`
+- `skeem alias search`
+- Added minimal `skeem_aliases` provisioning on first alias write, while alias-backed reads safely no-op when the alias store has not been created yet
+- Added unit coverage for:
+- alias normalization
+- alias lookup candidate detection
+- Added Directus smoke coverage for:
+- alias add/list/search/remove
+- alias-backed relation resolution
+- alias-backed upsert
+- alias-backed link
+
+## Slice 11: System Initialization and Provisioning
+
+Status: completed
+
+### Why now
+
+We now have the first real system-table behavior, but it is still provisioned implicitly. The next logical step is to make that infrastructure explicit and inspectable so a repo or agent can prepare a backend intentionally before relying on higher-level features.
+
+### Scope
+
+- Add `skeem init`
+- Add `skeem init --status`
+- Provision the currently supported system table set explicitly, starting with `skeem_aliases`
+- Keep destructive reset behavior and broader system-table rollout narrow unless it is trivial
+
+### Deliverables
+
+- A repeatable initialization command for supported system tables
+- Status output that shows which supported system tables already exist
+- Clear separation between explicitly provisioned tables and future placeholders
+- Unit or integration coverage for:
+- idempotent re-run behavior
+- status output before and after initialization
+- Smoke coverage that:
+- runs `skeem init`
+- verifies `skeem_aliases` exists
+- re-runs `skeem init` safely without drift or duplicate creation
+
+### Exit criteria
+
+- A user can intentionally prepare a backend for the currently supported system-table features without depending on side effects from alias writes
+
+### Completion Notes
+
+- Added `skeem init`
+- Added `skeem init --status`
+- Centralized the currently supported system-table definitions in one module so runtime features and provisioning share the same source of truth
+- Explicit provisioning now supports the current system-table surface:
+- `skeem_aliases`
+- Kept initialization idempotent:
+- first run creates missing supported tables
+- repeat runs report a no-op state instead of attempting duplicate creation
+- Preserved lightweight alias auto-provisioning, but now route it through the same system-table definitions used by `skeem init`
+- Added unit coverage for:
+- supported system-table definitions
+- status generation from live schema presence
+- Extended the Directus smoke harness to validate:
+- `init --status` before provisioning
+- `init` provisioning
+- `init --status` after provisioning
+- idempotent re-run behavior
+
+## Slice 12: Provenance Tracking Foundation
+
+Status: completed
+
+### Why now
+
+We now have explicit system-table provisioning and the first identity table in place. The next logical step is to make writes observable, since provenance is the next system-table-backed behavior the spec calls out and it compounds the value of every existing mutation verb.
+
+### Scope
+
+- Introduce the minimal `skeem_provenance` table definition and provisioning support
+- Record provenance entries for core write operations:
+- create
+- update
+- delete
+- link
+- unlink
+- upsert
+- Thread `--actor` and `--context` through provenance writes where available
+- Keep full diff snapshots and version history out of scope
+
+### Deliverables
+
+- `skeem init` support for provisioning `skeem_provenance`
+- Automatic provenance writes for supported mutation verbs
+- Clear provenance record shape that identifies collection, record id, operation, actor, and context
+- Unit or integration coverage for:
+- provenance payload creation
+- actor/context propagation
+- Smoke coverage that:
+- performs one or more write operations
+- queries `skeem_provenance`
+- verifies the expected entries were recorded
+
+### Exit criteria
+
+- Core write activity is queryable in the backend without requiring external logging or manual audit hooks
+
+### Completion Notes
+
+- Added `skeem_provenance` to the supported system-table set and `skeem init` provisioning flow
+- Added shared provenance payload helpers with actor precedence:
+- `--actor`
+- config actor
+- default fallback
+- Threaded provenance writes through the shared runtime for:
+- `create`
+- `update`
+- `delete`
+- `upsert`
+- `link`
+- `unlink`
+- `exec` variants of those write operations
+- Recorded actor, actor type, context, idempotency key, and input metadata in provenance rows
+- Added unit coverage for:
+- provenance actor resolution
+- provenance payload shaping
+- Extended the Directus smoke harness to validate:
+- `init` status and provisioning for `skeem_provenance`
+- create provenance rows with actor/context/idempotency
+- upsert provenance rows
+- link and unlink provenance rows
+- delete provenance rows
+
+## Slice 13: Version History Foundation
+
+Status: completed
+
+### Why now
+
+Provenance is now in place, which gives us the stable foreign-key and audit context the spec expects for version history. The next logical step is to capture previous record state before updates so change history becomes queryable without introducing full restore flows yet.
+
+### Scope
+
+- Introduce the minimal `skeem_versions` system-table definition and provisioning support
+- Snapshot the previous record state before `update` and update-shaped `upsert` operations
+- Store version number, prior snapshot, changed fields, and provenance linkage where available
+- Keep restore, diff-between-versions, and soft delete out of scope for this slice
+
+### Deliverables
+
+- `skeem init` support for provisioning `skeem_versions`
+- Automatic version rows written before successful updates
+- Stable version numbering per `(collection, record_id)`
+- Unit or integration coverage for:
+- version number incrementing
+- changed-field detection
+- provenance linkage
+- Smoke coverage that:
+- updates a record at least twice
+- queries `skeem_versions`
+- verifies snapshots and version numbers are correct
+
+### Exit criteria
+
+- A user can inspect prior record state for normal updates without relying on external backup or audit systems
+
+### Completion Notes
+
+- Added `skeem_versions` to the supported system-table set and `skeem init` provisioning flow
+- Added shared version helpers for:
+- changed-field detection
+- version record shaping
+- Hooked version recording into the shared update paths for:
+- `update`
+- update-shaped `upsert`
+- `exec` update
+- update-shaped `exec upsert`
+- Version rows now store:
+- per-record version number
+- the pre-update snapshot
+- changed field names
+- linked provenance row ids where available
+- Added unit coverage for:
+- changed-field detection across primitive and nested values
+- version record shaping with provenance linkage
+- Extended the Directus smoke harness to validate:
+- `init` status and provisioning for `skeem_versions`
+- a direct `update` creating version `1`
+- an update-shaped `upsert` creating version `2`
+- snapshot ordering and changed-field contents via `skeem find skeem_versions --sort -version`
+
+## Slice 14: Soft Delete and Restore Foundation
+
+Status: completed
+
+### Why now
+
+Version history is in place, so the next logical step is to stop losing deleted records outright. The spec’s next major behavior is soft delete through `skeem_trash`, and that builds naturally on the provenance and snapshot work we now have.
+
+### Scope
+
+- Introduce the minimal `skeem_trash` system-table definition and provisioning support
+- Change default `skeem delete` behavior to move records into trash before removing them from the source collection
+- Add a narrow `skeem restore <collection> <id>` path for restoring a trashed record
+- Keep auto-expiry, purge jobs, and `--hard` delete semantics narrow unless they fall out cleanly
+
+### Deliverables
+
+- `skeem init` support for provisioning `skeem_trash`
+- Soft-delete writes that capture snapshot, actor metadata, and provenance linkage
+- `skeem restore` for the happy path where the source id is free to reclaim
+- Unit or integration coverage for:
+- trash record shaping
+- restore eligibility checks
+- Smoke coverage that:
+- soft deletes a record
+- verifies the live record disappears
+- verifies a trash entry exists
+- restores the record and verifies it is readable again
+
+### Exit criteria
+
+- Normal deletes become reversible in the common case, without needing direct database access or manual recovery steps
+
+### Completion Notes
+
+- Added `skeem_trash` to the supported system-table set and `skeem init` provisioning flow
+- Changed default `skeem delete` behavior to soft delete into `skeem_trash`
+- Added `skeem delete --hard` to bypass trash intentionally
+- Added `skeem restore <collection> <id>` for happy-path recovery when the source id is free
+- Reused the shared runtime so top-level `delete` and `exec` delete now use the same soft-delete semantics
+- Trash rows now store:
+- original collection and record id
+- full pre-delete snapshot
+- actor metadata via `deleted_by`
+- linked delete provenance ids where available
+- Added unit coverage for:
+- trash record shaping
+- Extended the Directus smoke harness to validate:
+- `init` status and provisioning for `skeem_trash`
+- soft delete removing a live record while creating a trash entry
+- restore re-creating the original record and clearing its trash row
+- hard delete bypassing trash
+
+## Slice 15: Claims and Coordination Foundation
+
+Status: next
+
+### Why now
+
+The data lifecycle is now much safer: writes are auditable, updates are versioned, and deletes are reversible. The next logical step is to help multiple agents coordinate around shared records, which is the next major runtime behavior in the spec.
+
+### Scope
+
+- Introduce the minimal `skeem_claims` system-table definition and provisioning support
+- Add `skeem claim <collection:id>`
+- Add `skeem claims <collection:id>`
+- Add `skeem release <collection:id>`
+- Support lease durations and ignore expired claims in read paths
+- Keep automatic renewal, wait queues, and broad policy controls out of scope
+
+### Deliverables
+
+- `skeem init` support for provisioning `skeem_claims`
+- Claim acquisition with actor and lease metadata
+- Readable status output for active vs expired claims
+- Release behavior that validates actor ownership where appropriate
+- Unit or integration coverage for:
+- lease parsing
+- expired claim filtering
+- actor ownership checks
+- Smoke coverage that:
+- acquires a claim
+- reads active claim state
+- releases it
+- verifies expired claims do not block new work
+
+### Exit criteria
+
+- Concurrent agents can coordinate on a record using lightweight leases without inventing external locking infrastructure
+
 ## Recommended Order
 
 1. Slice 1: Discovery Completeness
@@ -507,12 +801,16 @@ The higher-level relation verbs are now in place, but they still only resolve ag
 8. Slice 8: Higher-Level Data Verbs
 9. Slice 9: Exec Verb Parity
 10. Slice 10: Identity and Alias Resolution
+11. Slice 11: System Initialization and Provisioning
+12. Slice 12: Provenance Tracking Foundation
+13. Slice 13: Version History Foundation
+14. Slice 14: Soft Delete and Restore Foundation
+15. Slice 15: Claims and Coordination Foundation
 
 ## Not Next
 
 These are intentionally not part of the immediate next slice:
 
-- soft delete and restore
 - extension loading
 - tool schema generation
 - additional adapters
