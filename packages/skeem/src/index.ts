@@ -3,4 +3,7 @@ export * from "./errors/index.js";
 export * from "./config/load-config.js";
 export * from "./cache/schema-cache.js";
 export * from "./output/formatter.js";
+export * from "./schema/document.js";
+export * from "./schema/diff.js";
+export * from "./schema/plan.js";
 export * from "./schema/serialization.js";

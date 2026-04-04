@@ -37,7 +37,7 @@ function makeSchema(): Schema {
               relatedField: "id",
             },
           ],
-          uniqueConstraints: [],
+          uniqueConstraints: [{ fields: ["name", "company_id"] }],
         },
       ],
     ]),
@@ -68,6 +68,7 @@ describe("schemaToDocument", () => {
       collection: "companies",
       type: "m2o",
     });
+    expect(document.collections.people?.uniqueConstraints).toEqual([["company_id", "name"]]);
     expect(document.collections.people?.fields.id).toBeUndefined();
   });
 });

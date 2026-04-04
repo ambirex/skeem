@@ -2,7 +2,7 @@ import YAML from "yaml";
 
 import { SkemError } from "../errors/index.js";
 import type { DescribeDocument, SchemaDocument } from "../schema/serialization.js";
-import type { ErrorEnvelope, SuccessEnvelope } from "../types/index.js";
+import type { ErrorEnvelope, SchemaDiffResult, SchemaPlanEntry, SchemaPlanSummary, SuccessEnvelope } from "../types/index.js";
 
 export function toSuccessEnvelope(partial: Omit<SuccessEnvelope, "ok">): SuccessEnvelope {
   return {
@@ -88,6 +88,18 @@ function renderHuman(envelope: SuccessEnvelope | ErrorEnvelope): string {
     return renderDescribe(envelope.collection ?? "collection", envelope.data as DescribeDocument & { count?: number | null });
   }
 
+  if (envelope.operation === "diff" && envelope.data && typeof envelope.data === "object") {
+    return renderDiff(envelope.data as SchemaDiffResult);
+  }
+
+  if ((envelope.operation === "define" || (envelope.operation === "dry_run" && envelope.action === "define")) && Array.isArray(envelope.plan)) {
+    return renderDefinePlan(
+      envelope.operation,
+      envelope.plan as SchemaPlanEntry[],
+      envelope.data as { path?: string; summary?: SchemaPlanSummary } | undefined,
+    );
+  }
+
   if (envelope.operation === "find" && Array.isArray(envelope.data)) {
     return envelope.data.length === 0
       ? `No records found in ${envelope.collection}.`
@@ -96,6 +108,24 @@ function renderHuman(envelope: SuccessEnvelope | ErrorEnvelope): string {
 
   if (envelope.operation === "delete") {
     return `Deleted record from ${envelope.collection}.`;
+  }
+
+  if (envelope.operation === "upsert") {
+    const verb = envelope.action === "created" ? "Created" : "Updated";
+    return `${verb} record in ${envelope.collection}.`;
+  }
+
+  if ((envelope.operation === "link" || envelope.operation === "unlink") && envelope.data && typeof envelope.data === "object") {
+    const data = envelope.data as {
+      source?: { collection?: string; id?: string | number };
+      target?: { collection?: string; id?: string | number };
+      relation?: { field?: string; type?: string } | string;
+    };
+    const relationField = typeof data.relation === "string" ? data.relation : data.relation?.field;
+    const source = `${data.source?.collection ?? envelope.collection}#${data.source?.id ?? "?"}`;
+    const target = `${data.target?.collection ?? "record"}#${data.target?.id ?? "?"}`;
+    const status = envelope.action?.replace(/_/g, " ") ?? envelope.operation;
+    return `${status}: ${source} ${relationField ? `${relationField} ` : ""}${envelope.operation === "link" ? "->" : "x"} ${target}`;
   }
 
   return YAML.stringify(envelope.data ?? envelope);
@@ -141,4 +171,70 @@ function renderDescribe(collectionName: string, describe: DescribeDocument & { c
     uniqueConstraints,
     ...(describe.count !== undefined ? [`  Records: ${describe.count ?? "unknown"}`] : []),
   ].join("\n");
+}
+
+function renderDiff(diff: SchemaDiffResult): string {
+  const directionDescription = diff.direction === "define" ? "file is truth" : "live is truth";
+  const lines = [
+    `Comparing ${diff.path ?? "schema document"} against live backend...`,
+    `Direction: ${diff.direction} (${directionDescription})`,
+  ];
+
+  if (diff.changes.length === 0) {
+    lines.push("  No schema differences found.");
+  } else {
+    lines.push(...diff.changes.map((change) => `  ${symbolFor(change.status)} ${change.message}`));
+  }
+
+  if (diff.matches.length > 0) {
+    lines.push(...diff.matches.map((match) => `  = ${match}`));
+  }
+
+  lines.push(
+    `Summary: ${diff.summary.totalChanges} changes, ${diff.summary.matches} matches`,
+  );
+  return lines.join("\n");
+}
+
+function symbolFor(status: "only_in_file" | "only_in_live" | "mismatch"): "+" | "-" | "~" {
+  switch (status) {
+    case "only_in_live":
+      return "+";
+    case "only_in_file":
+      return "-";
+    case "mismatch":
+      return "~";
+  }
+}
+
+function renderDefinePlan(
+  operation: string,
+  plan: SchemaPlanEntry[],
+  data?: { path?: string; summary?: SchemaPlanSummary },
+): string {
+  const lines = [
+    `${operation === "dry_run" ? "Plan" : "Applied"}: ${data?.path ?? "schema document"}`,
+  ];
+
+  if (plan.length === 0) {
+    lines.push("  No schema changes required.");
+  } else {
+    lines.push(...plan.map((entry, index) => {
+      const prefix = entry.status === "applied"
+        ? "  ="
+        : entry.status === "skipped"
+          ? "  !"
+          : "  ";
+      const suffix = entry.reason ? ` [${entry.reason}]` : "";
+      return `${prefix} ${index + 1}. ${entry.summary}${suffix}`;
+    }));
+  }
+
+  if (data?.summary) {
+    lines.push(
+      `Summary: ${data.summary.total} actions, ${data.summary.applied} applied, ${data.summary.skipped} skipped, ${data.summary.blocked} blocked`,
+    );
+  }
+
+  return lines.join("\n");
 }

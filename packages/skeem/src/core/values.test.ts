@@ -44,6 +44,68 @@ describe("topoSortOperations", () => {
     expect(sorted.map((entry) => entry.ref)).toEqual(["company", "person"]);
   });
 
+  test("orders upsert and relation mutations by refs inside match and target objects", () => {
+    const sorted = topoSortOperations([
+      {
+        ref: "person_link",
+        op: "link",
+        collection: "people",
+        id: "$person.id",
+        relation: "company",
+        target: {
+          id: "$company.id",
+          collection: "companies",
+        },
+      },
+      {
+        ref: "company_upsert",
+        op: "upsert",
+        collection: "companies",
+        match: {
+          name: "$seed.name",
+        },
+        data: {
+          industry: "Technology",
+        },
+      },
+      {
+        ref: "seed",
+        op: "create",
+        collection: "companies",
+        data: {
+          name: "Acme",
+        },
+      },
+      {
+        ref: "person",
+        op: "create",
+        collection: "people",
+        data: {
+          name: "Jane",
+        },
+      },
+      {
+        ref: "company",
+        op: "findOne",
+        collection: "companies",
+        filter: {
+          name: "$seed.name",
+        },
+      },
+    ]);
+
+    const order = sorted.map((entry) => entry.ref);
+    expect(order).toContain("seed");
+    expect(order).toContain("company_upsert");
+    expect(order).toContain("person");
+    expect(order).toContain("company");
+    expect(order).toContain("person_link");
+    expect(order.indexOf("seed")).toBeLessThan(order.indexOf("company"));
+    expect(order.indexOf("seed")).toBeLessThan(order.indexOf("company_upsert"));
+    expect(order.indexOf("person")).toBeLessThan(order.indexOf("person_link"));
+    expect(order.indexOf("company")).toBeLessThan(order.indexOf("person_link"));
+  });
+
   test("fails with a helpful message for missing refs", () => {
     expect(() => topoSortOperations([
       {
@@ -128,6 +190,38 @@ describe("resolveRefs", () => {
           },
         },
       ],
+    });
+  });
+
+  test("replaces refs inside exec match and target payloads", () => {
+    const resolved = resolveRefs(
+      {
+        match: {
+          name: "$seed.name",
+        },
+        target: {
+          id: "$company.id",
+          collection: "companies",
+        },
+      },
+      {
+        seed: {
+          name: "Acme",
+        },
+        company: {
+          id: 42,
+        },
+      },
+    );
+
+    expect(resolved).toEqual({
+      match: {
+        name: "Acme",
+      },
+      target: {
+        id: 42,
+        collection: "companies",
+      },
     });
   });
 });

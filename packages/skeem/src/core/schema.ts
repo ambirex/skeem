@@ -17,7 +17,7 @@ export function resolveCollectionName(schema: Schema, input: string, config: Res
 
 export function filterCollections(schema: Schema, config: ResolvedConfig): Collection[] {
   return Array.from(schema.collections.values()).filter((collection) => {
-    return !config.schema.exclude.some((pattern) => matchesGlob(collection.name, pattern));
+    return collection.isJunction !== true && !config.schema.exclude.some((pattern) => matchesGlob(collection.name, pattern));
   });
 }
 

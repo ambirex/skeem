@@ -51,9 +51,23 @@ export class SchemaCache {
       const metaRaw = await readFile(this.metaPath, "utf8");
       const meta = JSON.parse(metaRaw) as CacheMeta;
       const ageMs = Date.now() - new Date(meta.savedAt).getTime();
-      return { exists: true, ageMs, meta };
+      return {
+        exists: true,
+        ageMs,
+        meta,
+        cacheDir: this.cacheDir,
+        schemaPath: this.schemaPath,
+        metaPath: this.metaPath,
+        ttlMs: this.ttlMs,
+      };
     } catch {
-      return { exists: false };
+      return {
+        exists: false,
+        cacheDir: this.cacheDir,
+        schemaPath: this.schemaPath,
+        metaPath: this.metaPath,
+        ttlMs: this.ttlMs,
+      };
     }
   }
 }
