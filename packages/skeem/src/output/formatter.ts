@@ -88,6 +88,10 @@ function renderHuman(envelope: SuccessEnvelope | ErrorEnvelope): string {
     return renderDescribe(envelope.collection ?? "collection", envelope.data as DescribeDocument & { count?: number | null });
   }
 
+  if ((envelope.operation === "init" || envelope.operation === "init_status") && envelope.data) {
+    return renderInit(envelope.operation, envelope.action, envelope.data);
+  }
+
   if (envelope.operation === "diff" && envelope.data && typeof envelope.data === "object") {
     return renderDiff(envelope.data as SchemaDiffResult);
   }
@@ -107,7 +111,13 @@ function renderHuman(envelope: SuccessEnvelope | ErrorEnvelope): string {
   }
 
   if (envelope.operation === "delete") {
-    return `Deleted record from ${envelope.collection}.`;
+    return envelope.action === "trashed"
+      ? `Moved record from ${envelope.collection} to trash.`
+      : `Deleted record from ${envelope.collection}.`;
+  }
+
+  if (envelope.operation === "restore") {
+    return `Restored record to ${envelope.collection}.`;
   }
 
   if (envelope.operation === "upsert") {
@@ -126,6 +136,21 @@ function renderHuman(envelope: SuccessEnvelope | ErrorEnvelope): string {
     const target = `${data.target?.collection ?? "record"}#${data.target?.id ?? "?"}`;
     const status = envelope.action?.replace(/_/g, " ") ?? envelope.operation;
     return `${status}: ${source} ${relationField ? `${relationField} ` : ""}${envelope.operation === "link" ? "->" : "x"} ${target}`;
+  }
+
+  if ((envelope.operation === "alias_list" || envelope.operation === "alias_search") && Array.isArray(envelope.data)) {
+    return envelope.data.length === 0
+      ? `No aliases found for ${envelope.collection}.`
+      : envelope.data.map((row) => JSON.stringify(row)).join("\n");
+  }
+
+  if (envelope.operation === "alias_add") {
+    return `${envelope.action === "exists" ? "Alias exists" : "Alias added"} for ${envelope.collection}.`;
+  }
+
+  if (envelope.operation === "alias_remove" && envelope.data && typeof envelope.data === "object") {
+    const removed = (envelope.data as { removed?: number }).removed ?? 0;
+    return removed > 0 ? `Removed ${removed} alias${removed === 1 ? "" : "es"} from ${envelope.collection}.` : `No aliases removed from ${envelope.collection}.`;
   }
 
   return YAML.stringify(envelope.data ?? envelope);
@@ -234,6 +259,33 @@ function renderDefinePlan(
     lines.push(
       `Summary: ${data.summary.total} actions, ${data.summary.applied} applied, ${data.summary.skipped} skipped, ${data.summary.blocked} blocked`,
     );
+  }
+
+  return lines.join("\n");
+}
+
+function renderInit(operation: string, action: string | undefined, data: unknown): string {
+  const payload = (Array.isArray(data)
+    ? { status: data }
+    : (data && typeof data === "object" ? data : {})) as {
+    status?: Array<{ collection?: string; exists?: boolean; purpose?: string }>;
+    applied?: string[];
+    supported?: number;
+  };
+  const lines = [
+    operation === "init_status" ? "System table status:" : `System initialization${action ? ` (${action})` : ""}:`,
+  ];
+
+  if (Array.isArray(payload.status) && payload.status.length > 0) {
+    lines.push(...payload.status.map((entry) => `  ${entry.exists ? "=" : "-"} ${entry.collection}${entry.purpose ? `  ${entry.purpose}` : ""}`));
+  }
+
+  if (Array.isArray(payload.applied) && payload.applied.length > 0) {
+    lines.push(`Applied: ${payload.applied.join(", ")}`);
+  }
+
+  if (typeof payload.supported === "number") {
+    lines.push(`Supported: ${payload.supported}`);
   }
 
   return lines.join("\n");

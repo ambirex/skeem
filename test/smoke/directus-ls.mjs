@@ -259,6 +259,274 @@ try {
     throw new Error(`Junction collections should stay hidden from ls:\n${JSON.stringify(lsAfterDefine, null, 2)}`);
   }
 
+  const initStatusBefore = await runSkeemJson(["init", "--status"]);
+  if (
+    !initStatusBefore.ok ||
+    !Array.isArray(initStatusBefore.data) ||
+    initStatusBefore.data.find((entry) => entry.collection === "skeem_aliases")?.exists !== false ||
+    initStatusBefore.data.find((entry) => entry.collection === "skeem_provenance")?.exists !== false ||
+    initStatusBefore.data.find((entry) => entry.collection === "skeem_versions")?.exists !== false ||
+    initStatusBefore.data.find((entry) => entry.collection === "skeem_trash")?.exists !== false
+  ) {
+    throw new Error(`Init status before apply was unexpected:\n${JSON.stringify(initStatusBefore, null, 2)}`);
+  }
+
+  const initApply = await runSkeemJson(["init"]);
+  if (
+    !initApply.ok ||
+    initApply.operation !== "init" ||
+    !Array.isArray(initApply.data?.applied) ||
+    !initApply.data.applied.includes("skeem_aliases") ||
+    !initApply.data.applied.includes("skeem_provenance") ||
+    !initApply.data.applied.includes("skeem_versions") ||
+    !initApply.data.applied.includes("skeem_trash")
+  ) {
+    throw new Error(`Init apply failed:\n${JSON.stringify(initApply, null, 2)}`);
+  }
+
+  const initStatusAfter = await runSkeemJson(["init", "--status"]);
+  if (
+    !initStatusAfter.ok ||
+    !Array.isArray(initStatusAfter.data) ||
+    initStatusAfter.data.find((entry) => entry.collection === "skeem_aliases")?.exists !== true ||
+    initStatusAfter.data.find((entry) => entry.collection === "skeem_provenance")?.exists !== true ||
+    initStatusAfter.data.find((entry) => entry.collection === "skeem_versions")?.exists !== true ||
+    initStatusAfter.data.find((entry) => entry.collection === "skeem_trash")?.exists !== true
+  ) {
+    throw new Error(`Init status after apply was unexpected:\n${JSON.stringify(initStatusAfter, null, 2)}`);
+  }
+
+  const initAgain = await runSkeemJson(["init"]);
+  if (!initAgain.ok || initAgain.action !== "noop" || initAgain.data?.applied?.length !== 0) {
+    throw new Error(`Init should be idempotent on repeat runs:\n${JSON.stringify(initAgain, null, 2)}`);
+  }
+
+  const provenanceCompany = await runSkeemJson([
+    "create",
+    "companies",
+    "--name",
+    "Provenance Co",
+    "--actor",
+    "assistant-provenance",
+    "--context",
+    "{\"task\":\"create\"}",
+    "--idempotency-key",
+    "prov-create-1",
+  ]);
+  const provenanceCompanyId = provenanceCompany.data?.id;
+  if (!provenanceCompany.ok || (typeof provenanceCompanyId !== "number" && typeof provenanceCompanyId !== "string")) {
+    throw new Error(`Failed to create provenance fixture company:\n${JSON.stringify(provenanceCompany, null, 2)}`);
+  }
+
+  const provenanceCreateRows = await runSkeemJson(["find", "skeem_provenance", "--where", "collection=companies", "--where", "operation=create"]);
+  const provenanceCreateRow = expectProvenanceEntry(provenanceCreateRows, {
+    collection: "companies",
+    recordId: provenanceCompanyId,
+    operation: "create",
+  });
+  if (
+    provenanceCreateRow.actor !== "assistant-provenance" ||
+    provenanceCreateRow.actor_type !== "agent" ||
+    provenanceCreateRow.context?.task !== "create" ||
+    provenanceCreateRow.idempotency_key !== "prov-create-1" ||
+    provenanceCreateRow.input_refs?.fields?.name !== "Provenance Co"
+  ) {
+    throw new Error(`Create provenance row was unexpected:\n${JSON.stringify(provenanceCreateRow, null, 2)}`);
+  }
+
+  const provenanceUpsert = await runSkeemJson([
+    "upsert",
+    "companies",
+    "--match",
+    "name=Provenance Co",
+    "--industry",
+    "Audit",
+    "--actor",
+    "assistant-provenance",
+    "--context",
+    "{\"task\":\"upsert\"}",
+    "--idempotency-key",
+    "prov-upsert-1",
+  ]);
+  if (!provenanceUpsert.ok || provenanceUpsert.action !== "updated" || provenanceUpsert.data?.id !== provenanceCompanyId) {
+    throw new Error(`Provenance upsert fixture failed:\n${JSON.stringify(provenanceUpsert, null, 2)}`);
+  }
+
+  const provenanceUpsertRows = await runSkeemJson(["find", "skeem_provenance", "--where", "collection=companies", "--where", "operation=upsert"]);
+  const provenanceUpsertRow = expectProvenanceEntry(provenanceUpsertRows, {
+    collection: "companies",
+    recordId: provenanceCompanyId,
+    operation: "upsert",
+  });
+  if (
+    provenanceUpsertRow.context?.task !== "upsert" ||
+    provenanceUpsertRow.idempotency_key !== "prov-upsert-1" ||
+    provenanceUpsertRow.input_refs?.action !== "updated" ||
+    provenanceUpsertRow.input_refs?.match?.name !== "Provenance Co"
+  ) {
+    throw new Error(`Upsert provenance row was unexpected:\n${JSON.stringify(provenanceUpsertRow, null, 2)}`);
+  }
+
+  const provenancePerson = await runSkeemJson([
+    "create",
+    "people",
+    "--name",
+    "Provenance Pat",
+    "--actor",
+    "assistant-provenance",
+    "--context",
+    "{\"task\":\"person-create\"}",
+  ]);
+  const provenancePersonId = provenancePerson.data?.id;
+  if (!provenancePerson.ok || (typeof provenancePersonId !== "number" && typeof provenancePersonId !== "string")) {
+    throw new Error(`Failed to create provenance fixture person:\n${JSON.stringify(provenancePerson, null, 2)}`);
+  }
+
+  const provenanceLink = await runSkeemJson([
+    "link",
+    `people:${provenancePersonId}`,
+    "company",
+    "?name=Provenance Co",
+    "--actor",
+    "assistant-provenance",
+    "--context",
+    "{\"task\":\"link\"}",
+  ]);
+  if (!provenanceLink.ok || provenanceLink.action !== "linked") {
+    throw new Error(`Provenance link fixture failed:\n${JSON.stringify(provenanceLink, null, 2)}`);
+  }
+
+  const provenanceLinkRows = await runSkeemJson(["find", "skeem_provenance", "--where", "collection=people", "--where", "operation=link"]);
+  const provenanceLinkRow = expectProvenanceEntry(provenanceLinkRows, {
+    collection: "people",
+    recordId: provenancePersonId,
+    operation: "link",
+  });
+  if (
+    provenanceLinkRow.context?.task !== "link" ||
+    provenanceLinkRow.input_refs?.relation !== "company_id" ||
+    provenanceLinkRow.input_refs?.target?.filter?.name !== "Provenance Co"
+  ) {
+    throw new Error(`Link provenance row was unexpected:\n${JSON.stringify(provenanceLinkRow, null, 2)}`);
+  }
+
+  const provenanceUnlink = await runSkeemJson([
+    "unlink",
+    `people:${provenancePersonId}`,
+    "company",
+    `companies:${provenanceCompanyId}`,
+    "--actor",
+    "assistant-provenance",
+    "--context",
+    "{\"task\":\"unlink\"}",
+  ]);
+  if (!provenanceUnlink.ok || provenanceUnlink.action !== "unlinked") {
+    throw new Error(`Provenance unlink fixture failed:\n${JSON.stringify(provenanceUnlink, null, 2)}`);
+  }
+
+  const provenanceUnlinkRows = await runSkeemJson(["find", "skeem_provenance", "--where", "collection=people", "--where", "operation=unlink"]);
+  const provenanceUnlinkRow = expectProvenanceEntry(provenanceUnlinkRows, {
+    collection: "people",
+    recordId: provenancePersonId,
+    operation: "unlink",
+  });
+  if (
+    provenanceUnlinkRow.context?.task !== "unlink" ||
+    provenanceUnlinkRow.input_refs?.target?.id !== provenanceCompanyId
+  ) {
+    throw new Error(`Unlink provenance row was unexpected:\n${JSON.stringify(provenanceUnlinkRow, null, 2)}`);
+  }
+
+  const provenanceDelete = await runSkeemJson([
+    "delete",
+    "people",
+    String(provenancePersonId),
+    "--actor",
+    "assistant-provenance",
+    "--context",
+    "{\"task\":\"delete\"}",
+    "--idempotency-key",
+    "prov-delete-1",
+  ]);
+  if (!provenanceDelete.ok || provenanceDelete.operation !== "delete") {
+    throw new Error(`Provenance delete fixture failed:\n${JSON.stringify(provenanceDelete, null, 2)}`);
+  }
+
+  const provenanceDeleteRows = await runSkeemJson(["find", "skeem_provenance", "--where", "collection=people", "--where", "operation=delete"]);
+  const provenanceDeleteRow = expectProvenanceEntry(provenanceDeleteRows, {
+    collection: "people",
+    recordId: provenancePersonId,
+    operation: "delete",
+  });
+  if (
+    provenanceDeleteRow.context?.task !== "delete" ||
+    provenanceDeleteRow.idempotency_key !== "prov-delete-1"
+  ) {
+    throw new Error(`Delete provenance row was unexpected:\n${JSON.stringify(provenanceDeleteRow, null, 2)}`);
+  }
+
+  const versionedCompany = await runSkeemJson(["create", "companies", "--name", "Versioned Co", "--industry", "Seed"]);
+  const versionedCompanyId = versionedCompany.data?.id;
+  if (!versionedCompany.ok || (typeof versionedCompanyId !== "number" && typeof versionedCompanyId !== "string")) {
+    throw new Error(`Failed to create version fixture company:\n${JSON.stringify(versionedCompany, null, 2)}`);
+  }
+
+  const versionedUpdate = await runSkeemJson([
+    "update",
+    "companies",
+    String(versionedCompanyId),
+    "--industry",
+    "Series A",
+    "--actor",
+    "assistant-version",
+    "--context",
+    "{\"task\":\"version-update\"}",
+  ]);
+  if (!versionedUpdate.ok || versionedUpdate.data?.industry !== "Series A") {
+    throw new Error(`Version fixture update failed:\n${JSON.stringify(versionedUpdate, null, 2)}`);
+  }
+
+  const versionedUpsert = await runSkeemJson([
+    "upsert",
+    "companies",
+    "--match",
+    "name=Versioned Co",
+    "--industry",
+    "Series B",
+    "--actor",
+    "assistant-version",
+    "--context",
+    "{\"task\":\"version-upsert\"}",
+  ]);
+  if (!versionedUpsert.ok || versionedUpsert.action !== "updated" || versionedUpsert.data?.industry !== "Series B") {
+    throw new Error(`Version fixture upsert failed:\n${JSON.stringify(versionedUpsert, null, 2)}`);
+  }
+
+  const versionRows = await runSkeemJson(["find", "skeem_versions", "--where", "collection=companies", "--sort", "-version"]);
+  const versionHistory = expectVersionEntries(versionRows, {
+    collection: "companies",
+    recordId: versionedCompanyId,
+    count: 2,
+  });
+  if (
+    versionHistory[0]?.version !== 2 ||
+    versionHistory[0]?.snapshot?.industry !== "Series A" ||
+    !Array.isArray(versionHistory[0]?.changed_fields) ||
+    !versionHistory[0].changed_fields.includes("industry") ||
+    (typeof versionHistory[0]?.provenance_id !== "number" && typeof versionHistory[0]?.provenance_id !== "string")
+  ) {
+    throw new Error(`Latest version row was unexpected:\n${JSON.stringify(versionHistory, null, 2)}`);
+  }
+  if (
+    versionHistory[1]?.version !== 1 ||
+    versionHistory[1]?.snapshot?.industry !== "Seed" ||
+    !Array.isArray(versionHistory[1]?.changed_fields) ||
+    !versionHistory[1].changed_fields.includes("industry") ||
+    versionHistory[1]?.snapshot?.name !== "Versioned Co"
+  ) {
+    throw new Error(`Initial version row was unexpected:\n${JSON.stringify(versionHistory, null, 2)}`);
+  }
+
   const upsertCompanyCreate = await runSkeemJson(["upsert", "companies", "--match", "name=Upsert Co", "--industry", "Services"]);
   const upsertCompanyId = upsertCompanyCreate.data?.id;
   if (!upsertCompanyCreate.ok || upsertCompanyCreate.action !== "created" || upsertCompanyCreate.data?.industry !== "Services") {
@@ -388,7 +656,7 @@ try {
   }
 
   const deleted = await runSkeemJson(["delete", "widgets", String(widgetId)]);
-  if (!deleted.ok || deleted.operation !== "delete") {
+  if (!deleted.ok || deleted.operation !== "delete" || deleted.action !== "trashed") {
     throw new Error(`Delete failed:\n${JSON.stringify(deleted, null, 2)}`);
   }
 
@@ -400,6 +668,49 @@ try {
   const findAfterDelete = await runSkeemJson(["find", "widgets", "--where", `id=${widgetId}`]);
   if (!findAfterDelete.ok || findAfterDelete.count !== 0) {
     throw new Error(`Expected deleted record to disappear from find results:\n${JSON.stringify(findAfterDelete, null, 2)}`);
+  }
+
+  const trashRows = await runSkeemJson(["find", "skeem_trash", "--where", "collection=widgets"]);
+  const trashRow = expectTrashEntry(trashRows, {
+    collection: "widgets",
+    recordId: widgetId,
+  });
+  if (
+    trashRow.snapshot?.id !== widgetId ||
+    trashRow.snapshot?.name !== "Beta Widget" ||
+    (typeof trashRow.provenance_id !== "number" && typeof trashRow.provenance_id !== "string")
+  ) {
+    throw new Error(`Trash row was unexpected after soft delete:\n${JSON.stringify(trashRow, null, 2)}`);
+  }
+
+  const restoreDryRun = await runSkeemJson(["restore", "widgets", String(widgetId), "--dry-run"]);
+  if (!restoreDryRun.ok || restoreDryRun.operation !== "dry_run" || restoreDryRun.action !== "restore") {
+    throw new Error(`Restore dry-run failed:\n${JSON.stringify(restoreDryRun, null, 2)}`);
+  }
+
+  const restored = await runSkeemJson(["restore", "widgets", String(widgetId)]);
+  if (!restored.ok || restored.operation !== "restore" || !["restored", "restored_with_residual_trash"].includes(restored.action ?? "")) {
+    throw new Error(`Restore failed:\n${JSON.stringify(restored, null, 2)}`);
+  }
+
+  const restoredGet = await runSkeemJson(["get", "widgets", String(widgetId)]);
+  if (!restoredGet.ok || restoredGet.data?.name !== "Beta Widget") {
+    throw new Error(`Restored record was not readable:\n${JSON.stringify(restoredGet, null, 2)}`);
+  }
+
+  const trashRowsAfterRestore = await runSkeemJson(["find", "skeem_trash", "--where", "collection=widgets"]);
+  if (!trashRowsAfterRestore.ok || trashRowsAfterRestore.data?.some((entry) => String(entry.record_id) === String(widgetId))) {
+    throw new Error(`Restore should remove the trash entry:\n${JSON.stringify(trashRowsAfterRestore, null, 2)}`);
+  }
+
+  const hardDeleted = await runSkeemJson(["delete", "widgets", String(widgetId), "--hard"]);
+  if (!hardDeleted.ok || hardDeleted.operation !== "delete" || hardDeleted.action !== "hard_deleted" || hardDeleted.data?.trashed !== false) {
+    throw new Error(`Hard delete failed:\n${JSON.stringify(hardDeleted, null, 2)}`);
+  }
+
+  const hardDeleteTrashRows = await runSkeemJson(["find", "skeem_trash", "--where", "collection=widgets"]);
+  if (!hardDeleteTrashRows.ok || hardDeleteTrashRows.data?.some((entry) => String(entry.record_id) === String(widgetId))) {
+    throw new Error(`Hard delete should bypass trash:\n${JSON.stringify(hardDeleteTrashRows, null, 2)}`);
   }
 
   const lsAfter = await runSkeemJson(["ls", "--counts"]);
@@ -417,6 +728,59 @@ try {
   const directPerson = await runSkeemJson(["create", "people", "--name", "Direct Dana", "--company", `@${directCompanyId}`]);
   if (!directPerson.ok || directPerson.data?.company_id !== directCompanyId) {
     throw new Error(`@ relation create failed:\n${JSON.stringify(directPerson, null, 2)}`);
+  }
+
+  const aliasAdd = await runSkeemJson(["alias", "add", `companies:${directCompanyId}`, "ACME Inc."]);
+  if (!aliasAdd.ok || !["added", "exists"].includes(aliasAdd.action ?? "")) {
+    throw new Error(`Alias add failed:\n${JSON.stringify(aliasAdd, null, 2)}`);
+  }
+
+  const aliasList = await runSkeemJson(["alias", "list", `companies:${directCompanyId}`]);
+  if (!aliasList.ok || aliasList.count !== 1 || aliasList.data?.[0]?.alias !== "ACME Inc.") {
+    throw new Error(`Alias list failed:\n${JSON.stringify(aliasList, null, 2)}`);
+  }
+
+  const aliasSearch = await runSkeemJson(["alias", "search", "companies", "acme"]);
+  if (!aliasSearch.ok || aliasSearch.count !== 1 || aliasSearch.data?.[0]?.record_id !== String(directCompanyId)) {
+    throw new Error(`Alias search failed:\n${JSON.stringify(aliasSearch, null, 2)}`);
+  }
+
+  const aliasResolvedPerson = await runSkeemJson([
+    "create",
+    "people",
+    "--name",
+    "Alias Amy",
+    "--company",
+    "?name=ACME Inc.",
+  ]);
+  if (!aliasResolvedPerson.ok || aliasResolvedPerson.data?.company_id !== directCompanyId) {
+    throw new Error(`Alias-backed ? resolution failed:\n${JSON.stringify(aliasResolvedPerson, null, 2)}`);
+  }
+
+  const aliasUpsert = await runSkeemJson(["upsert", "companies", "--match", "name=ACME Inc.", "--industry", "Alias Updated"]);
+  if (!aliasUpsert.ok || aliasUpsert.action !== "updated" || aliasUpsert.data?.id !== directCompanyId || aliasUpsert.data?.industry !== "Alias Updated") {
+    throw new Error(`Alias-backed upsert failed:\n${JSON.stringify(aliasUpsert, null, 2)}`);
+  }
+
+  const aliasLinkPerson = await runSkeemJson(["create", "people", "--name", "Alias Link Lucy"]);
+  const aliasLinkPersonId = aliasLinkPerson.data?.id;
+  if (!aliasLinkPerson.ok || (typeof aliasLinkPersonId !== "number" && typeof aliasLinkPersonId !== "string")) {
+    throw new Error(`Failed to create alias link fixture person:\n${JSON.stringify(aliasLinkPerson, null, 2)}`);
+  }
+
+  const aliasLink = await runSkeemJson(["link", `people:${aliasLinkPersonId}`, "company", "?name=ACME Inc."]);
+  if (!aliasLink.ok || aliasLink.action !== "linked" || aliasLink.data?.record?.company_id !== directCompanyId) {
+    throw new Error(`Alias-backed link failed:\n${JSON.stringify(aliasLink, null, 2)}`);
+  }
+
+  const aliasRemove = await runSkeemJson(["alias", "remove", `companies:${directCompanyId}`, "ACME Inc."]);
+  if (!aliasRemove.ok || aliasRemove.data?.removed !== 1) {
+    throw new Error(`Alias remove failed:\n${JSON.stringify(aliasRemove, null, 2)}`);
+  }
+
+  const aliasListAfterRemove = await runSkeemJson(["alias", "list", `companies:${directCompanyId}`]);
+  if (!aliasListAfterRemove.ok || aliasListAfterRemove.count !== 0) {
+    throw new Error(`Alias should be gone after removal:\n${JSON.stringify(aliasListAfterRemove, null, 2)}`);
   }
 
   const m2oPerson = await runSkeemJson(["create", "people", "--name", "Link Lucy"]);
@@ -870,18 +1234,38 @@ try {
           defineApply: true,
           defineDestructiveSkip: true,
           defineDestructiveApply: true,
+          initStatusBefore: true,
+          initApply: true,
+          initStatusAfter: true,
+          initAgain: true,
+          provenanceCreate: true,
+          provenanceUpsert: true,
+          provenanceLink: true,
+          provenanceUnlink: true,
+          provenanceDelete: true,
+          versionUpdate: true,
+          versionUpsert: true,
           upsertCreate: true,
           upsertUpdate: true,
           linkM2m: true,
           unlinkM2m: true,
           linkM2o: true,
           unlinkM2o: true,
+          aliasAdd: true,
+          aliasList: true,
+          aliasSearch: true,
+          aliasResolve: true,
+          aliasUpsert: true,
+          aliasLink: true,
+          aliasRemove: true,
           relationDryRun: true,
           create: true,
           get: true,
           find: true,
           update: true,
           delete: true,
+          restore: true,
+          hardDelete: true,
           relationAt: true,
           relationDot: true,
           relationResolve: true,
@@ -1257,6 +1641,58 @@ function expectPlanAction(envelope, expected) {
 
   if (!match) {
     throw new Error(`Expected plan action ${JSON.stringify(expected)}:\n${JSON.stringify(envelope, null, 2)}`);
+  }
+
+  return match;
+}
+
+function expectProvenanceEntry(envelope, expected) {
+  if (!envelope.ok || !Array.isArray(envelope.data)) {
+    throw new Error(`Expected provenance envelope:\n${JSON.stringify(envelope, null, 2)}`);
+  }
+
+  const match = envelope.data.find((entry) => (
+    entry.collection === expected.collection &&
+    entry.operation === expected.operation &&
+    String(entry.record_id) === String(expected.recordId)
+  ));
+
+  if (!match) {
+    throw new Error(`Expected provenance entry ${JSON.stringify(expected)}:\n${JSON.stringify(envelope, null, 2)}`);
+  }
+
+  return match;
+}
+
+function expectVersionEntries(envelope, expected) {
+  if (!envelope.ok || !Array.isArray(envelope.data)) {
+    throw new Error(`Expected version envelope:\n${JSON.stringify(envelope, null, 2)}`);
+  }
+
+  const matches = envelope.data.filter((entry) => (
+    entry.collection === expected.collection &&
+    String(entry.record_id) === String(expected.recordId)
+  ));
+
+  if (matches.length !== expected.count) {
+    throw new Error(`Expected ${expected.count} version rows for ${JSON.stringify(expected)}:\n${JSON.stringify(envelope, null, 2)}`);
+  }
+
+  return matches;
+}
+
+function expectTrashEntry(envelope, expected) {
+  if (!envelope.ok || !Array.isArray(envelope.data)) {
+    throw new Error(`Expected trash envelope:\n${JSON.stringify(envelope, null, 2)}`);
+  }
+
+  const match = envelope.data.find((entry) => (
+    entry.collection === expected.collection &&
+    String(entry.record_id) === String(expected.recordId)
+  ));
+
+  if (!match) {
+    throw new Error(`Expected trash entry ${JSON.stringify(expected)}:\n${JSON.stringify(envelope, null, 2)}`);
   }
 
   return match;
