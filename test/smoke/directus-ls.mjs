@@ -266,7 +266,9 @@ try {
     initStatusBefore.data.find((entry) => entry.collection === "skeem_aliases")?.exists !== false ||
     initStatusBefore.data.find((entry) => entry.collection === "skeem_provenance")?.exists !== false ||
     initStatusBefore.data.find((entry) => entry.collection === "skeem_versions")?.exists !== false ||
-    initStatusBefore.data.find((entry) => entry.collection === "skeem_trash")?.exists !== false
+    initStatusBefore.data.find((entry) => entry.collection === "skeem_trash")?.exists !== false ||
+    initStatusBefore.data.find((entry) => entry.collection === "skeem_claims")?.exists !== false ||
+    initStatusBefore.data.find((entry) => entry.collection === "skeem_annotations")?.exists !== false
   ) {
     throw new Error(`Init status before apply was unexpected:\n${JSON.stringify(initStatusBefore, null, 2)}`);
   }
@@ -279,7 +281,9 @@ try {
     !initApply.data.applied.includes("skeem_aliases") ||
     !initApply.data.applied.includes("skeem_provenance") ||
     !initApply.data.applied.includes("skeem_versions") ||
-    !initApply.data.applied.includes("skeem_trash")
+    !initApply.data.applied.includes("skeem_trash") ||
+    !initApply.data.applied.includes("skeem_claims") ||
+    !initApply.data.applied.includes("skeem_annotations")
   ) {
     throw new Error(`Init apply failed:\n${JSON.stringify(initApply, null, 2)}`);
   }
@@ -291,7 +295,9 @@ try {
     initStatusAfter.data.find((entry) => entry.collection === "skeem_aliases")?.exists !== true ||
     initStatusAfter.data.find((entry) => entry.collection === "skeem_provenance")?.exists !== true ||
     initStatusAfter.data.find((entry) => entry.collection === "skeem_versions")?.exists !== true ||
-    initStatusAfter.data.find((entry) => entry.collection === "skeem_trash")?.exists !== true
+    initStatusAfter.data.find((entry) => entry.collection === "skeem_trash")?.exists !== true ||
+    initStatusAfter.data.find((entry) => entry.collection === "skeem_claims")?.exists !== true ||
+    initStatusAfter.data.find((entry) => entry.collection === "skeem_annotations")?.exists !== true
   ) {
     throw new Error(`Init status after apply was unexpected:\n${JSON.stringify(initStatusAfter, null, 2)}`);
   }
@@ -299,6 +305,518 @@ try {
   const initAgain = await runSkeemJson(["init"]);
   if (!initAgain.ok || initAgain.action !== "noop" || initAgain.data?.applied?.length !== 0) {
     throw new Error(`Init should be idempotent on repeat runs:\n${JSON.stringify(initAgain, null, 2)}`);
+  }
+
+  const claimedCompany = await runSkeemJson(["create", "companies", "--name", "Claimed Co"]);
+  const claimedCompanyId = claimedCompany.data?.id;
+  if (!claimedCompany.ok || (typeof claimedCompanyId !== "number" && typeof claimedCompanyId !== "string")) {
+    throw new Error(`Failed to create claim fixture company:\n${JSON.stringify(claimedCompany, null, 2)}`);
+  }
+
+  const claimAcquire = await runSkeemJson([
+    "claim",
+    `companies:${claimedCompanyId}`,
+    "--actor",
+    "assistant-claims-1",
+    "--lease",
+    "5m",
+    "--purpose",
+    "processing",
+  ]);
+  if (
+    !claimAcquire.ok ||
+    claimAcquire.operation !== "claim" ||
+    claimAcquire.action !== "claimed" ||
+    claimAcquire.data?.claim?.claimed_by !== "assistant-claims-1" ||
+    claimAcquire.data?.claim?.purpose !== "processing"
+  ) {
+    throw new Error(`Claim acquire failed:\n${JSON.stringify(claimAcquire, null, 2)}`);
+  }
+
+  const claimStatus = await runSkeemJson(["claims", `companies:${claimedCompanyId}`]);
+  if (
+    !claimStatus.ok ||
+    claimStatus.operation !== "claims" ||
+    claimStatus.action !== "claimed" ||
+    claimStatus.count !== 1 ||
+    claimStatus.data?.claim?.claimed_by !== "assistant-claims-1"
+  ) {
+    throw new Error(`Claim status failed:\n${JSON.stringify(claimStatus, null, 2)}`);
+  }
+
+  const claimRows = await runSkeemJson(["find", "skeem_claims", "--where", "collection=companies"]);
+  const activeClaim = expectClaimEntry(claimRows, {
+    collection: "companies",
+    recordId: claimedCompanyId,
+  });
+  if (
+    activeClaim.claimed_by !== "assistant-claims-1" ||
+    activeClaim.purpose !== "processing"
+  ) {
+    throw new Error(`Claim row was unexpected:\n${JSON.stringify(activeClaim, null, 2)}`);
+  }
+
+  const claimWrongRelease = await runSkeemJson([
+    "release",
+    `companies:${claimedCompanyId}`,
+    "--actor",
+    "assistant-claims-2",
+  ], { expectFailure: true });
+  if (
+    claimWrongRelease.ok ||
+    claimWrongRelease.error?.code !== "VALIDATION"
+  ) {
+    throw new Error(`Wrong-owner release should fail validation:\n${JSON.stringify(claimWrongRelease, null, 2)}`);
+  }
+
+  const claimRelease = await runSkeemJson([
+    "release",
+    `companies:${claimedCompanyId}`,
+    "--actor",
+    "assistant-claims-1",
+  ]);
+  if (
+    !claimRelease.ok ||
+    claimRelease.operation !== "release" ||
+    claimRelease.action !== "released" ||
+    claimRelease.data?.released !== 1
+  ) {
+    throw new Error(`Claim release failed:\n${JSON.stringify(claimRelease, null, 2)}`);
+  }
+
+  const claimStatusAfterRelease = await runSkeemJson(["claims", `companies:${claimedCompanyId}`]);
+  if (
+    !claimStatusAfterRelease.ok ||
+    claimStatusAfterRelease.action !== "unclaimed" ||
+    claimStatusAfterRelease.count !== 0 ||
+    claimStatusAfterRelease.data?.claim !== null
+  ) {
+    throw new Error(`Claim should be gone after release:\n${JSON.stringify(claimStatusAfterRelease, null, 2)}`);
+  }
+
+  const claimExpiring = await runSkeemJson([
+    "claim",
+    `companies:${claimedCompanyId}`,
+    "--actor",
+    "assistant-expiring",
+    "--lease",
+    "1s",
+  ]);
+  if (!claimExpiring.ok || claimExpiring.action !== "claimed") {
+    throw new Error(`Short claim fixture failed:\n${JSON.stringify(claimExpiring, null, 2)}`);
+  }
+
+  await sleep(1_200);
+
+  const claimExpiredStatus = await runSkeemJson(["claims", `companies:${claimedCompanyId}`]);
+  if (
+    !claimExpiredStatus.ok ||
+    claimExpiredStatus.action !== "unclaimed" ||
+    claimExpiredStatus.count !== 0 ||
+    claimExpiredStatus.data?.claim !== null
+  ) {
+    throw new Error(`Expired claim should not remain active:\n${JSON.stringify(claimExpiredStatus, null, 2)}`);
+  }
+
+  const claimAfterExpiry = await runSkeemJson([
+    "claim",
+    `companies:${claimedCompanyId}`,
+    "--actor",
+    "assistant-claims-3",
+    "--lease",
+    "5m",
+    "--purpose",
+    "reprocessing",
+  ]);
+  if (
+    !claimAfterExpiry.ok ||
+    claimAfterExpiry.action !== "claimed" ||
+    claimAfterExpiry.data?.claim?.claimed_by !== "assistant-claims-3"
+  ) {
+    throw new Error(`Claim reacquire after expiry failed:\n${JSON.stringify(claimAfterExpiry, null, 2)}`);
+  }
+
+  const claimRowsAfterExpiry = await runSkeemJson(["find", "skeem_claims", "--where", "collection=companies"]);
+  const activeClaimAfterExpiry = expectClaimEntry(claimRowsAfterExpiry, {
+    collection: "companies",
+    recordId: claimedCompanyId,
+  });
+  if (
+    activeClaimAfterExpiry.claimed_by !== "assistant-claims-3" ||
+    activeClaimAfterExpiry.purpose !== "reprocessing"
+  ) {
+    throw new Error(`Claim row after expiry cleanup was unexpected:\n${JSON.stringify(activeClaimAfterExpiry, null, 2)}`);
+  }
+
+  const claimFinalRelease = await runSkeemJson([
+    "release",
+    `companies:${claimedCompanyId}`,
+    "--actor",
+    "assistant-claims-3",
+  ]);
+  if (!claimFinalRelease.ok || claimFinalRelease.action !== "released") {
+    throw new Error(`Final claim cleanup failed:\n${JSON.stringify(claimFinalRelease, null, 2)}`);
+  }
+
+  const annotateDryRun = await runSkeemJson([
+    "annotate",
+    `companies:${claimedCompanyId}`,
+    "--key",
+    "quality_score",
+    "--value",
+    "0.85",
+    "--actor",
+    "assistant-annotation",
+    "--expires",
+    "10m",
+    "--dry-run",
+  ]);
+  if (
+    !annotateDryRun.ok ||
+    annotateDryRun.operation !== "dry_run" ||
+    annotateDryRun.action !== "annotate" ||
+    annotateDryRun.data?.annotation?.key !== "quality_score" ||
+    annotateDryRun.data?.annotation?.value !== 0.85
+  ) {
+    throw new Error(`Annotate dry-run failed:\n${JSON.stringify(annotateDryRun, null, 2)}`);
+  }
+
+  const annotateWrite = await runSkeemJson([
+    "annotate",
+    `companies:${claimedCompanyId}`,
+    "--key",
+    "quality_score",
+    "--value",
+    "0.85",
+    "--actor",
+    "assistant-annotation",
+    "--expires",
+    "10m",
+  ]);
+  if (
+    !annotateWrite.ok ||
+    annotateWrite.operation !== "annotate" ||
+    annotateWrite.action !== "annotated" ||
+    annotateWrite.data?.annotation?.key !== "quality_score" ||
+    annotateWrite.data?.annotation?.value !== 0.85 ||
+    annotateWrite.data?.annotation?.actor !== "assistant-annotation" ||
+    typeof annotateWrite.data?.annotation?.expires_at !== "string"
+  ) {
+    throw new Error(`Annotate write failed:\n${JSON.stringify(annotateWrite, null, 2)}`);
+  }
+
+  const annotateNote = await runSkeemJson([
+    "annotate",
+    `companies:${claimedCompanyId}`,
+    "--key",
+    "note",
+    "--value",
+    JSON.stringify("Email bounced 2026-03-15"),
+    "--actor",
+    "assistant-annotation-2",
+  ]);
+  if (
+    !annotateNote.ok ||
+    annotateNote.data?.annotation?.key !== "note" ||
+    annotateNote.data?.annotation?.value !== "Email bounced 2026-03-15"
+  ) {
+    throw new Error(`String annotation write failed:\n${JSON.stringify(annotateNote, null, 2)}`);
+  }
+
+  const annotationRows = await runSkeemJson([
+    "find",
+    "skeem_annotations",
+    "--where",
+    "collection=companies",
+  ]);
+  const qualityScoreAnnotation = expectAnnotationEntry(annotationRows, {
+    collection: "companies",
+    recordId: claimedCompanyId,
+    key: "quality_score",
+  });
+  if (
+    qualityScoreAnnotation.value !== 0.85 ||
+    qualityScoreAnnotation.actor !== "assistant-annotation" ||
+    typeof qualityScoreAnnotation.expires_at !== "string"
+  ) {
+    throw new Error(`Quality-score annotation row was unexpected:\n${JSON.stringify(qualityScoreAnnotation, null, 2)}`);
+  }
+
+  const noteAnnotation = expectAnnotationEntry(annotationRows, {
+    collection: "companies",
+    recordId: claimedCompanyId,
+    key: "note",
+  });
+  if (
+    noteAnnotation.value !== "Email bounced 2026-03-15" ||
+    noteAnnotation.actor !== "assistant-annotation-2"
+  ) {
+    throw new Error(`Note annotation row was unexpected:\n${JSON.stringify(noteAnnotation, null, 2)}`);
+  }
+
+  const idempotentCreate = await runSkeemJson([
+    "create",
+    "companies",
+    "--name",
+    "Idempotent Create Co",
+    "--idempotency-key",
+    "idem-create-1",
+  ]);
+  const idempotentCreateId = idempotentCreate.data?.id;
+  if (!idempotentCreate.ok || (typeof idempotentCreateId !== "number" && typeof idempotentCreateId !== "string")) {
+    throw new Error(`Idempotent create failed:\n${JSON.stringify(idempotentCreate, null, 2)}`);
+  }
+
+  const idempotentCreateReplay = await runSkeemJson([
+    "create",
+    "companies",
+    "--name",
+    "Idempotent Create Co",
+    "--idempotency-key",
+    "idem-create-1",
+  ]);
+  if (
+    !idempotentCreateReplay.ok ||
+    idempotentCreateReplay.operation !== "create" ||
+    idempotentCreateReplay.data?.id !== idempotentCreateId
+  ) {
+    throw new Error(`Idempotent create replay failed:\n${JSON.stringify(idempotentCreateReplay, null, 2)}`);
+  }
+
+  const idempotentCreateRows = await runSkeemJson(["find", "companies", "--where", "name=Idempotent Create Co"]);
+  if (!idempotentCreateRows.ok || idempotentCreateRows.count !== 1) {
+    throw new Error(`Idempotent create should not create duplicates:\n${JSON.stringify(idempotentCreateRows, null, 2)}`);
+  }
+
+  const idempotentMismatch = await runSkeemJson([
+    "create",
+    "companies",
+    "--name",
+    "Different Idempotent Co",
+    "--idempotency-key",
+    "idem-create-1",
+  ], { expectFailure: true });
+  if (!idempotentMismatch.error || idempotentMismatch.error.code !== "VALIDATION") {
+    throw new Error(`Idempotent mismatch should fail validation:\n${JSON.stringify(idempotentMismatch, null, 2)}`);
+  }
+
+  const idempotentUpdate = await runSkeemJson([
+    "update",
+    "companies",
+    String(idempotentCreateId),
+    "--industry",
+    "Replay Safe",
+    "--idempotency-key",
+    "idem-update-1",
+  ]);
+  if (!idempotentUpdate.ok || idempotentUpdate.data?.industry !== "Replay Safe") {
+    throw new Error(`Idempotent update failed:\n${JSON.stringify(idempotentUpdate, null, 2)}`);
+  }
+
+  const idempotentUpdateReplay = await runSkeemJson([
+    "update",
+    "companies",
+    String(idempotentCreateId),
+    "--industry",
+    "Replay Safe",
+    "--idempotency-key",
+    "idem-update-1",
+  ]);
+  if (!idempotentUpdateReplay.ok || idempotentUpdateReplay.data?.industry !== "Replay Safe") {
+    throw new Error(`Idempotent update replay failed:\n${JSON.stringify(idempotentUpdateReplay, null, 2)}`);
+  }
+
+  const idempotentUpdateVersions = await runSkeemJson([
+    "find",
+    "skeem_versions",
+    "--where",
+    "collection=companies",
+    "--where",
+    `record_id=${idempotentCreateId}`,
+  ]);
+  if (!idempotentUpdateVersions.ok || idempotentUpdateVersions.count !== 1) {
+    throw new Error(`Idempotent update replay should not create extra version rows:\n${JSON.stringify(idempotentUpdateVersions, null, 2)}`);
+  }
+
+  const idempotentUpsert = await runSkeemJson([
+    "upsert",
+    "companies",
+    "--match",
+    "name=Idempotent Upsert Co",
+    "--industry",
+    "Services",
+    "--idempotency-key",
+    "idem-upsert-1",
+  ]);
+  const idempotentUpsertId = idempotentUpsert.data?.id;
+  if (
+    !idempotentUpsert.ok ||
+    idempotentUpsert.action !== "created" ||
+    (typeof idempotentUpsertId !== "number" && typeof idempotentUpsertId !== "string")
+  ) {
+    throw new Error(`Idempotent upsert failed:\n${JSON.stringify(idempotentUpsert, null, 2)}`);
+  }
+
+  const idempotentUpsertReplay = await runSkeemJson([
+    "upsert",
+    "companies",
+    "--match",
+    "name=Idempotent Upsert Co",
+    "--industry",
+    "Services",
+    "--idempotency-key",
+    "idem-upsert-1",
+  ]);
+  if (
+    !idempotentUpsertReplay.ok ||
+    idempotentUpsertReplay.action !== "created" ||
+    idempotentUpsertReplay.data?.id !== idempotentUpsertId
+  ) {
+    throw new Error(`Idempotent upsert replay failed:\n${JSON.stringify(idempotentUpsertReplay, null, 2)}`);
+  }
+
+  const idempotentUpsertRows = await runSkeemJson(["find", "companies", "--where", "name=Idempotent Upsert Co"]);
+  if (!idempotentUpsertRows.ok || idempotentUpsertRows.count !== 1) {
+    throw new Error(`Idempotent upsert should not create duplicates:\n${JSON.stringify(idempotentUpsertRows, null, 2)}`);
+  }
+
+  const idempotentDeleteWidget = await runSkeemJson(["create", "widgets", "--name", "Idempotent Widget"]);
+  const idempotentDeleteWidgetId = idempotentDeleteWidget.data?.id;
+  if (!idempotentDeleteWidget.ok || (typeof idempotentDeleteWidgetId !== "number" && typeof idempotentDeleteWidgetId !== "string")) {
+    throw new Error(`Failed to create idempotent delete fixture widget:\n${JSON.stringify(idempotentDeleteWidget, null, 2)}`);
+  }
+
+  const idempotentDelete = await runSkeemJson([
+    "delete",
+    "widgets",
+    String(idempotentDeleteWidgetId),
+    "--idempotency-key",
+    "idem-delete-1",
+  ]);
+  if (!idempotentDelete.ok || idempotentDelete.action !== "trashed" || idempotentDelete.data?.id !== idempotentDeleteWidgetId) {
+    throw new Error(`Idempotent delete failed:\n${JSON.stringify(idempotentDelete, null, 2)}`);
+  }
+
+  const idempotentDeleteReplay = await runSkeemJson([
+    "delete",
+    "widgets",
+    String(idempotentDeleteWidgetId),
+    "--idempotency-key",
+    "idem-delete-1",
+  ]);
+  if (
+    !idempotentDeleteReplay.ok ||
+    idempotentDeleteReplay.action !== "trashed" ||
+    idempotentDeleteReplay.data?.trashId !== idempotentDelete.data?.trashId
+  ) {
+    throw new Error(`Idempotent delete replay failed:\n${JSON.stringify(idempotentDeleteReplay, null, 2)}`);
+  }
+
+  const idempotentDeleteTrash = await runSkeemJson([
+    "find",
+    "skeem_trash",
+    "--where",
+    "collection=widgets",
+  ]);
+  const idempotentDeleteTrashRow = expectTrashEntry(idempotentDeleteTrash, {
+    collection: "widgets",
+    recordId: idempotentDeleteWidgetId,
+  });
+  if (idempotentDeleteTrashRow.snapshot?.name !== "Idempotent Widget") {
+    throw new Error(`Idempotent delete trash row was unexpected:\n${JSON.stringify(idempotentDeleteTrashRow, null, 2)}`);
+  }
+
+  const idempotentPerson = await runSkeemJson(["create", "people", "--name", "Idempotent Linker"]);
+  const idempotentPersonId = idempotentPerson.data?.id;
+  if (!idempotentPerson.ok || (typeof idempotentPersonId !== "number" && typeof idempotentPersonId !== "string")) {
+    throw new Error(`Failed to create idempotent link fixture person:\n${JSON.stringify(idempotentPerson, null, 2)}`);
+  }
+
+  const idempotentLink = await runSkeemJson([
+    "link",
+    `people:${idempotentPersonId}`,
+    `companies:${idempotentCreateId}`,
+    "--idempotency-key",
+    "idem-link-1",
+  ]);
+  if (!idempotentLink.ok || idempotentLink.action !== "linked" || idempotentLink.data?.record?.company_id !== idempotentCreateId) {
+    throw new Error(`Idempotent link failed:\n${JSON.stringify(idempotentLink, null, 2)}`);
+  }
+
+  const idempotentLinkReplay = await runSkeemJson([
+    "link",
+    `people:${idempotentPersonId}`,
+    `companies:${idempotentCreateId}`,
+    "--idempotency-key",
+    "idem-link-1",
+  ]);
+  if (!idempotentLinkReplay.ok || idempotentLinkReplay.action !== "linked" || idempotentLinkReplay.data?.record?.company_id !== idempotentCreateId) {
+    throw new Error(`Idempotent link replay failed:\n${JSON.stringify(idempotentLinkReplay, null, 2)}`);
+  }
+
+  const idempotentUnlink = await runSkeemJson([
+    "unlink",
+    `people:${idempotentPersonId}`,
+    `companies:${idempotentCreateId}`,
+    "--idempotency-key",
+    "idem-unlink-1",
+  ]);
+  if (!idempotentUnlink.ok || idempotentUnlink.action !== "unlinked") {
+    throw new Error(`Idempotent unlink failed:\n${JSON.stringify(idempotentUnlink, null, 2)}`);
+  }
+
+  const idempotentUnlinkReplay = await runSkeemJson([
+    "unlink",
+    `people:${idempotentPersonId}`,
+    `companies:${idempotentCreateId}`,
+    "--idempotency-key",
+    "idem-unlink-1",
+  ]);
+  if (!idempotentUnlinkReplay.ok || idempotentUnlinkReplay.action !== "unlinked" || idempotentUnlinkReplay.data?.record?.company_id !== null) {
+    throw new Error(`Idempotent unlink replay failed:\n${JSON.stringify(idempotentUnlinkReplay, null, 2)}`);
+  }
+
+  const idempotentAnnotate = await runSkeemJson([
+    "annotate",
+    `companies:${idempotentCreateId}`,
+    "--key",
+    "idempotent_note",
+    "--value",
+    JSON.stringify("Replay me once"),
+    "--idempotency-key",
+    "idem-annotate-1",
+  ]);
+  if (!idempotentAnnotate.ok || idempotentAnnotate.data?.annotation?.key !== "idempotent_note") {
+    throw new Error(`Idempotent annotate failed:\n${JSON.stringify(idempotentAnnotate, null, 2)}`);
+  }
+
+  const idempotentAnnotateReplay = await runSkeemJson([
+    "annotate",
+    `companies:${idempotentCreateId}`,
+    "--key",
+    "idempotent_note",
+    "--value",
+    JSON.stringify("Replay me once"),
+    "--idempotency-key",
+    "idem-annotate-1",
+  ]);
+  if (!idempotentAnnotateReplay.ok || idempotentAnnotateReplay.data?.annotation?.key !== "idempotent_note") {
+    throw new Error(`Idempotent annotate replay failed:\n${JSON.stringify(idempotentAnnotateReplay, null, 2)}`);
+  }
+
+  const idempotentAnnotationRows = await runSkeemJson([
+    "find",
+    "skeem_annotations",
+    "--where",
+    "collection=companies",
+  ]);
+  const idempotentAnnotation = expectAnnotationEntry(idempotentAnnotationRows, {
+    collection: "companies",
+    recordId: idempotentCreateId,
+    key: "idempotent_note",
+  });
+  if (idempotentAnnotation.value !== "Replay me once") {
+    throw new Error(`Idempotent annotation row was unexpected:\n${JSON.stringify(idempotentAnnotation, null, 2)}`);
   }
 
   const provenanceCompany = await runSkeemJson([
@@ -1238,6 +1756,22 @@ try {
           initApply: true,
           initStatusAfter: true,
           initAgain: true,
+          claimAcquire: true,
+          claimStatus: true,
+          claimOwnership: true,
+          claimRelease: true,
+          claimExpiry: true,
+          annotateDryRun: true,
+          annotateWrite: true,
+          annotateRead: true,
+          idempotencyCreate: true,
+          idempotencyMismatch: true,
+          idempotencyUpdate: true,
+          idempotencyUpsert: true,
+          idempotencyDelete: true,
+          idempotencyLink: true,
+          idempotencyUnlink: true,
+          idempotencyAnnotate: true,
           provenanceCreate: true,
           provenanceUpsert: true,
           provenanceLink: true,
@@ -1696,6 +2230,41 @@ function expectTrashEntry(envelope, expected) {
   }
 
   return match;
+}
+
+function expectClaimEntry(envelope, expected) {
+  if (!envelope.ok || !Array.isArray(envelope.data)) {
+    throw new Error(`Expected claims envelope:\n${JSON.stringify(envelope, null, 2)}`);
+  }
+
+  const matches = envelope.data.filter((entry) => (
+    entry.collection === expected.collection &&
+    String(entry.record_id) === String(expected.recordId)
+  ));
+
+  if (matches.length !== 1) {
+    throw new Error(`Expected exactly one claim row for ${JSON.stringify(expected)}:\n${JSON.stringify(envelope, null, 2)}`);
+  }
+
+  return matches[0];
+}
+
+function expectAnnotationEntry(envelope, expected) {
+  if (!envelope.ok || !Array.isArray(envelope.data)) {
+    throw new Error(`Expected annotations envelope:\n${JSON.stringify(envelope, null, 2)}`);
+  }
+
+  const matches = envelope.data.filter((entry) => (
+    entry.collection === expected.collection &&
+    String(entry.record_id) === String(expected.recordId) &&
+    entry.key === expected.key
+  ));
+
+  if (matches.length !== 1) {
+    throw new Error(`Expected exactly one annotation row for ${JSON.stringify(expected)}:\n${JSON.stringify(envelope, null, 2)}`);
+  }
+
+  return matches[0];
 }
 
 function stringField(name, options = {}) {

@@ -174,6 +174,41 @@ export async function runCli(argv: string[]): Promise<void> {
         writeEnvelope(await runtime.restore(collection, parsePrimaryKey(id), cli), { json });
         return;
       }
+      case "claim": {
+        const [targetInput] = rest;
+        const lease = parsed.flags.get("lease")?.at(-1);
+        if (!targetInput || !lease) {
+          throw new UsageError("Usage: skeem claim <collection:id> --lease <duration> [--purpose text]");
+        }
+        writeEnvelope(await runtime.claim(targetInput, lease, parsed.flags.get("purpose")?.at(-1), cli), { json });
+        return;
+      }
+      case "claims": {
+        const [targetInput] = rest;
+        if (!targetInput) {
+          throw new UsageError("Usage: skeem claims <collection:id>");
+        }
+        writeEnvelope(await runtime.claims(targetInput, cli), { json });
+        return;
+      }
+      case "release": {
+        const [targetInput] = rest;
+        if (!targetInput) {
+          throw new UsageError("Usage: skeem release <collection:id>");
+        }
+        writeEnvelope(await runtime.release(targetInput, cli), { json });
+        return;
+      }
+      case "annotate": {
+        const [targetInput] = rest;
+        const key = parsed.flags.get("key")?.at(-1);
+        const value = parsed.flags.get("value")?.at(-1);
+        if (!targetInput || !key || value === undefined) {
+          throw new UsageError("Usage: skeem annotate <collection:id> --key <name> --value <json> [--expires <duration>]");
+        }
+        writeEnvelope(await runtime.annotate(targetInput, key, value, parsed.flags.get("expires")?.at(-1), cli), { json });
+        return;
+      }
       case "link": {
         const [sourceInput, relationOrTargetInput, maybeTargetInput] = rest;
         if (!sourceInput || !relationOrTargetInput) {
@@ -416,6 +451,10 @@ function helpText(): string {
     "  skeem update <collection> <id> [--field value]",
     "  skeem delete <collection> <id> [--hard]",
     "  skeem restore <collection> <id>",
+    "  skeem claim <collection:id> --lease <duration> [--purpose text]",
+    "  skeem claims <collection:id>",
+    "  skeem release <collection:id>",
+    "  skeem annotate <collection:id> --key <name> --value <json> [--expires <duration>]",
     "  skeem link <collection:id> <related_collection:id>",
     "  skeem link <collection:id> <relation> <target>",
     "  skeem unlink <collection:id> <related_collection:id>",

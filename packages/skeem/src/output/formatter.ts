@@ -120,6 +120,41 @@ function renderHuman(envelope: SuccessEnvelope | ErrorEnvelope): string {
     return `Restored record to ${envelope.collection}.`;
   }
 
+  if ((envelope.operation === "claim" || envelope.operation === "claims" || envelope.operation === "release") && envelope.data && typeof envelope.data === "object") {
+    const data = envelope.data as {
+      source?: { collection?: string; id?: string | number };
+      claim?: { claimed_by?: string; lease_until?: string; purpose?: string } | null;
+      released?: number;
+    };
+    const source = `${data.source?.collection ?? envelope.collection}#${data.source?.id ?? "?"}`;
+
+    if (envelope.operation === "claims") {
+      if (envelope.action === "unclaimed" || !data.claim) {
+        return `${source} is unclaimed.`;
+      }
+      const purpose = data.claim.purpose ? ` (${data.claim.purpose})` : "";
+      return `${source} is claimed by ${data.claim.claimed_by ?? "unknown"} until ${data.claim.lease_until ?? "unknown"}${purpose}.`;
+    }
+
+    if (envelope.operation === "claim") {
+      const purpose = data.claim?.purpose ? ` (${data.claim.purpose})` : "";
+      const verb = envelope.action === "renewed" ? "Renewed" : "Claimed";
+      return `${verb} ${source} for ${data.claim?.claimed_by ?? "unknown"} until ${data.claim?.lease_until ?? "unknown"}${purpose}.`;
+    }
+
+    const released = data.released ?? 0;
+    return released > 0 ? `Released claim on ${source}.` : `No active claim on ${source}.`;
+  }
+
+  if (envelope.operation === "annotate" && envelope.data && typeof envelope.data === "object") {
+    const data = envelope.data as {
+      source?: { collection?: string; id?: string | number };
+      annotation?: { key?: string };
+    };
+    const source = `${data.source?.collection ?? envelope.collection}#${data.source?.id ?? "?"}`;
+    return `Annotated ${source} with ${data.annotation?.key ?? "metadata"}.`;
+  }
+
   if (envelope.operation === "upsert") {
     const verb = envelope.action === "created" ? "Created" : "Updated";
     return `${verb} record in ${envelope.collection}.`;

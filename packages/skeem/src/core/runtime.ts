@@ -22,6 +22,12 @@ import { diffSchemaDocuments } from "../schema/diff.js";
 import { buildDefinePlan } from "../schema/plan.js";
 import { buildInputNode, parseFilterAssignment, resolveRefs, topoSortOperations } from "./values.js";
 import {
+  buildAnnotationRecord,
+  normalizeAnnotationKey,
+  parseAnnotationValue,
+  resolveAnnotationExpiry,
+} from "./annotations.js";
+import {
   buildLinkMutationPlan,
   buildUnlinkMutationPlan,
   mergeUpsertCreateData,
@@ -31,9 +37,12 @@ import {
   parseRecordReference,
   resolveUpsertDecision,
 } from "./data-verbs.js";
+import { attachIdempotencyMetadata, extractIdempotencyMetadata, idempotencyRequestsMatch, type IdempotencyRequest } from "./idempotency.js";
+import { isClaimActive, leaseUntilFromDuration, parseLeaseDuration, resolveClaimActor } from "./claims.js";
 import { getAliasLookupCandidate, normalizeAlias } from "./identity.js";
 import { buildProvenanceRecord } from "./provenance.js";
 import { buildTrashRecord } from "./trash.js";
+import { parseDurationMs } from "./duration.js";
 import { buildVersionRecord, diffChangedFields } from "./versioning.js";
 import {
   buildSystemCollectionStatus,
@@ -91,6 +100,8 @@ const ALIAS_COLLECTION = "skeem_aliases";
 const PROVENANCE_COLLECTION = "skeem_provenance";
 const VERSIONS_COLLECTION = "skeem_versions";
 const TRASH_COLLECTION = "skeem_trash";
+const CLAIMS_COLLECTION = "skeem_claims";
+const ANNOTATIONS_COLLECTION = "skeem_annotations";
 
 export class SkeemRuntime {
   private readonly ensuredSystemCollections = new Set<string>();
@@ -364,6 +375,14 @@ export class SkeemRuntime {
     const schema = await this.loadSchemaForData(cli);
     const collection = this.resolveCollection(schema, collectionInput);
     const node = buildInputNode(fieldEntries, collection.name);
+    const request = this.buildIdempotencyRequest("create", collection.name, {
+      fields: this.fieldEntriesToObject(fieldEntries),
+    });
+
+    const replay = await this.maybeReplayIdempotentWrite(cli, request);
+    if (replay) {
+      return replay;
+    }
 
     if (cli.dryRun) {
       return toSuccessEnvelope({
@@ -383,12 +402,22 @@ export class SkeemRuntime {
           },
         },
       });
-      return toSuccessEnvelope({
+      const envelope = toSuccessEnvelope({
         operation: result.plan.length > 1 ? "compound_create" : "create",
         collection: collection.name,
         data: result.record,
         plan: result.plan,
       });
+      await this.persistIdempotentReplay(
+        cli,
+        request,
+        {
+          fields: this.fieldEntriesToObject(fieldEntries),
+        },
+        envelope,
+        this.recordPrimaryKey(collection, result.record),
+      );
+      return envelope;
     } catch (error) {
       if (!cli.noRollback && error instanceof MutationFailureError) {
         await this.rollback(error.created);
@@ -406,6 +435,15 @@ export class SkeemRuntime {
     const schema = await this.loadSchemaForData(cli);
     const collection = this.resolveCollection(schema, collectionInput);
     const node = buildInputNode(fieldEntries, collection.name);
+    const request = this.buildIdempotencyRequest("update", collection.name, {
+      id,
+      fields: this.fieldEntriesToObject(fieldEntries),
+    });
+
+    const replay = await this.maybeReplayIdempotentWrite(cli, request);
+    if (replay) {
+      return replay;
+    }
 
     if (cli.dryRun) {
       return toSuccessEnvelope({
@@ -426,12 +464,23 @@ export class SkeemRuntime {
           },
         },
       });
-      return toSuccessEnvelope({
+      const envelope = toSuccessEnvelope({
         operation: "update",
         collection: collection.name,
         data: result.record,
         plan: result.plan,
       });
+      await this.persistIdempotentReplay(
+        cli,
+        request,
+        {
+          id,
+          fields: this.fieldEntriesToObject(fieldEntries),
+        },
+        envelope,
+        this.recordPrimaryKey(collection, result.record),
+      );
+      return envelope;
     } catch (error) {
       if (!cli.noRollback && error instanceof MutationFailureError) {
         await this.rollback(error.created);
@@ -449,6 +498,15 @@ export class SkeemRuntime {
     const schema = await this.loadSchemaForData(cli);
     const collection = this.resolveCollection(schema, collectionInput);
     const hardDelete = options?.hardDelete === true;
+    const request = this.buildIdempotencyRequest("delete", collection.name, {
+      id,
+      mode: hardDelete ? "hard" : "soft",
+    });
+
+    const replay = await this.maybeReplayIdempotentWrite(cli, request);
+    if (replay) {
+      return replay;
+    }
 
     if (cli.dryRun) {
       return toSuccessEnvelope({
@@ -474,12 +532,14 @@ export class SkeemRuntime {
       const result = hardDelete
         ? await this.hardDeleteRecord(collection, id, cli, { id })
         : await this.softDeleteRecord(collection, id, cli, { id });
-      return toSuccessEnvelope({
+      const envelope = toSuccessEnvelope({
         operation: "delete",
         action: hardDelete ? "hard_deleted" : "trashed",
         collection: collection.name,
         data: result,
       });
+      await this.persistIdempotentReplay(cli, request, { id }, envelope, id);
+      return envelope;
     } catch (error) {
       throw this.normalizeError(error, collection.name);
     }
@@ -521,6 +581,310 @@ export class SkeemRuntime {
     }
   }
 
+  async claim(
+    targetInput: string,
+    leaseInput: string,
+    purpose: string | undefined,
+    cli: CliGlobalOptions,
+  ): Promise<SuccessEnvelope> {
+    const schema = await this.loadSchemaForData(cli);
+    const target = parseRecordReference(targetInput, "record");
+    const collection = this.resolveCollection(schema, target.collectionInput);
+    const actor = resolveClaimActor(cli, this.config);
+    const leaseMs = parseLeaseDuration(leaseInput);
+
+    try {
+      await this.adapter.get(collection.name, target.id);
+      const source = { collection: collection.name, id: target.id };
+
+      if (cli.dryRun) {
+        return toSuccessEnvelope({
+          operation: "dry_run",
+          action: "claim",
+          collection: collection.name,
+          data: {
+            source,
+            claim: {
+              claimed_by: actor,
+              ...(purpose ? { purpose } : {}),
+              lease_until: leaseUntilFromDuration(leaseMs),
+            },
+          },
+          plan: [
+            {
+              ref: "root",
+              operation: "claim",
+              collection: CLAIMS_COLLECTION,
+              data: {
+                collection: collection.name,
+                record_id: String(target.id),
+                claimed_by: actor,
+                ...(purpose ? { purpose } : {}),
+                lease_duration: leaseInput,
+              },
+            },
+          ],
+        });
+      }
+
+      await this.ensureClaimsStore();
+      const state = await this.loadClaimState(collection.name, target.id);
+      const conflicting = state.active.filter((row) => String(row.claimed_by ?? "") !== actor);
+      if (conflicting.length > 0) {
+        const current = conflicting[0]!;
+        throw new ValidationError(
+          collection.name,
+          "claimed_by",
+          `Record "${collection.name}:${target.id}" is already claimed by "${String(current.claimed_by ?? "unknown")}" until "${String(current.lease_until ?? "unknown")}".`,
+        );
+      }
+
+      let record: EntityRecord;
+      let action: "claimed" | "renewed";
+      const current = state.active[0];
+      const payload = {
+        collection: collection.name,
+        record_id: String(target.id),
+        claimed_by: actor,
+        ...(purpose ? { purpose } : {}),
+        lease_until: leaseUntilFromDuration(leaseMs),
+      };
+
+      if (current) {
+        const claimId = this.extractSystemRecordId(current);
+        if (claimId === undefined) {
+          throw new ValidationError(CLAIMS_COLLECTION, "id", "Claim row is missing a primary key.");
+        }
+        record = await this.adapter.update(CLAIMS_COLLECTION, claimId, payload);
+        action = "renewed";
+        for (const duplicate of state.active.slice(1)) {
+          await this.cleanupSystemRecordBestEffort(CLAIMS_COLLECTION, duplicate);
+        }
+      } else {
+        record = await this.adapter.create(CLAIMS_COLLECTION, {
+          ...payload,
+          created_at: new Date().toISOString(),
+        });
+        action = "claimed";
+      }
+
+      return toSuccessEnvelope({
+        operation: "claim",
+        action,
+        collection: collection.name,
+        data: {
+          source,
+          claim: record,
+        },
+      });
+    } catch (error) {
+      throw this.normalizeError(error, collection.name);
+    }
+  }
+
+  async claims(targetInput: string, cli: CliGlobalOptions): Promise<SuccessEnvelope> {
+    const schema = await this.loadSchemaForData(cli);
+    const target = parseRecordReference(targetInput, "record");
+    const collection = this.resolveCollection(schema, target.collectionInput);
+
+    try {
+      await this.adapter.get(collection.name, target.id);
+      const source = { collection: collection.name, id: target.id };
+      const state = await this.loadClaimState(collection.name, target.id);
+      const claim = state.active[0] ?? null;
+      return toSuccessEnvelope({
+        operation: "claims",
+        action: claim ? "claimed" : "unclaimed",
+        collection: collection.name,
+        data: {
+          source,
+          claim,
+        },
+        count: claim ? 1 : 0,
+      });
+    } catch (error) {
+      throw this.normalizeError(error, collection.name);
+    }
+  }
+
+  async release(targetInput: string, cli: CliGlobalOptions): Promise<SuccessEnvelope> {
+    const schema = await this.loadSchemaForData(cli);
+    const target = parseRecordReference(targetInput, "record");
+    const collection = this.resolveCollection(schema, target.collectionInput);
+    const actor = resolveClaimActor(cli, this.config);
+
+    try {
+      await this.adapter.get(collection.name, target.id);
+      const source = { collection: collection.name, id: target.id };
+      const state = await this.loadClaimState(collection.name, target.id);
+      const active = state.active;
+
+      if (cli.dryRun) {
+        return toSuccessEnvelope({
+          operation: "dry_run",
+          action: "release",
+          collection: collection.name,
+          data: {
+            source,
+            claim: active[0] ?? null,
+            released: active.filter((row) => String(row.claimed_by ?? "") === actor).length,
+          },
+          plan: [
+            {
+              ref: "root",
+              operation: "release",
+              collection: CLAIMS_COLLECTION,
+              data: {
+                collection: collection.name,
+                record_id: String(target.id),
+                actor,
+              },
+            },
+          ],
+        });
+      }
+
+      if (active.length === 0) {
+        return toSuccessEnvelope({
+          operation: "release",
+          action: "not_claimed",
+          collection: collection.name,
+          data: {
+            source,
+            claim: null,
+            released: 0,
+          },
+        });
+      }
+
+      const conflicting = active.filter((row) => String(row.claimed_by ?? "") !== actor);
+      if (conflicting.length > 0) {
+        const current = conflicting[0]!;
+        throw new ValidationError(
+          collection.name,
+          "claimed_by",
+          `Record "${collection.name}:${target.id}" is claimed by "${String(current.claimed_by ?? "unknown")}" and cannot be released by "${actor}".`,
+        );
+      }
+
+      let released = 0;
+      for (const row of active) {
+        const claimId = this.extractSystemRecordId(row);
+        if (claimId === undefined) {
+          continue;
+        }
+        await this.adapter.delete(CLAIMS_COLLECTION, claimId);
+        released += 1;
+      }
+
+      return toSuccessEnvelope({
+        operation: "release",
+        action: released > 0 ? "released" : "not_claimed",
+        collection: collection.name,
+        data: {
+          source,
+          claim: active[0] ?? null,
+          released,
+        },
+      });
+    } catch (error) {
+      throw this.normalizeError(error, collection.name);
+    }
+  }
+
+  async annotate(
+    targetInput: string,
+    keyInput: string,
+    valueInput: string,
+    expiresInput: string | undefined,
+    cli: CliGlobalOptions,
+  ): Promise<SuccessEnvelope> {
+    const schema = await this.loadSchemaForData(cli);
+    const target = parseRecordReference(targetInput, "record");
+    const collection = this.resolveCollection(schema, target.collectionInput);
+    const key = normalizeAnnotationKey(keyInput);
+    const value = parseAnnotationValue(valueInput);
+    const expiresMs = expiresInput ? parseDurationMs(expiresInput, "--expires") : undefined;
+    const expiresAt = resolveAnnotationExpiry(expiresInput);
+    const request = this.buildIdempotencyRequest("annotate", collection.name, {
+      recordId: target.id,
+      key,
+      value,
+      ...(expiresMs !== undefined ? { expiresMs } : {}),
+    });
+
+    const replay = await this.maybeReplayIdempotentWrite(cli, request);
+    if (replay) {
+      return replay;
+    }
+
+    try {
+      await this.adapter.get(collection.name, target.id);
+      const source = { collection: collection.name, id: target.id };
+      const annotation = buildAnnotationRecord({
+        collection: collection.name,
+        recordId: target.id,
+        key,
+        value,
+        cli,
+        config: this.config,
+        ...(expiresAt ? { expiresAt } : {}),
+      });
+
+      if (cli.dryRun) {
+        return toSuccessEnvelope({
+          operation: "dry_run",
+          action: "annotate",
+          collection: collection.name,
+          data: {
+            source,
+            annotation,
+          },
+          plan: [
+            {
+              ref: "root",
+              operation: "annotate",
+              collection: ANNOTATIONS_COLLECTION,
+              data: annotation,
+            },
+          ],
+        });
+      }
+
+      await this.ensureAnnotationStore();
+      const record = await this.adapter.create(ANNOTATIONS_COLLECTION, annotation);
+      const envelope = toSuccessEnvelope({
+        operation: "annotate",
+        action: "annotated",
+        collection: collection.name,
+        data: {
+          source,
+          annotation: record,
+        },
+      });
+      await this.recordProvenance({
+        collection: collection.name,
+        recordId: target.id,
+        operation: "annotate",
+        cli,
+        inputRefs: cli.idempotencyKey
+          ? this.prepareIdempotentInputRefs(request, {
+            key,
+            value,
+            ...(expiresAt ? { expires_at: expiresAt } : {}),
+          }, envelope)
+          : {
+            key,
+            value,
+            ...(expiresAt ? { expires_at: expiresAt } : {}),
+          },
+      });
+      return envelope;
+    } catch (error) {
+      throw this.normalizeError(error, collection.name);
+    }
+  }
+
   async upsert(
     collectionInput: string,
     match: Filter,
@@ -534,7 +898,16 @@ export class SkeemRuntime {
     const schema = await this.loadSchemaForData(cli);
     const collection = this.resolveCollection(schema, collectionInput);
     const node = buildInputNode(fieldEntries, collection.name);
+    const request = this.buildIdempotencyRequest("upsert", collection.name, {
+      match,
+      fields: this.fieldEntriesToObject(fieldEntries),
+    });
     let decision: ReturnType<typeof resolveUpsertDecision>;
+
+    const replay = await this.maybeReplayIdempotentWrite(cli, request);
+    if (replay) {
+      return replay;
+    }
 
     try {
       const matches = await this.findIdentityMatches(collection, match);
@@ -571,13 +944,25 @@ export class SkeemRuntime {
             },
           },
         });
-        return toSuccessEnvelope({
+        const envelope = toSuccessEnvelope({
           operation: "upsert",
           action: "created",
           collection: collection.name,
           data: result.record,
           plan: result.plan,
         });
+        await this.persistIdempotentReplay(
+          cli,
+          request,
+          {
+            action: "created",
+            match,
+            fields: this.fieldEntriesToObject(fieldEntries),
+          },
+          envelope,
+          this.recordPrimaryKey(collection, result.record),
+        );
+        return envelope;
       } catch (error) {
         if (!cli.noRollback && error instanceof MutationFailureError) {
           await this.rollback(error.created);
@@ -616,13 +1001,26 @@ export class SkeemRuntime {
           },
         },
       });
-      return toSuccessEnvelope({
+      const envelope = toSuccessEnvelope({
         operation: "upsert",
         action: "updated",
         collection: collection.name,
         data: result.record,
         plan: result.plan,
       });
+      await this.persistIdempotentReplay(
+        cli,
+        request,
+        {
+          action: "updated",
+          id,
+          match,
+          fields: this.fieldEntriesToObject(fieldEntries),
+        },
+        envelope,
+        this.recordPrimaryKey(collection, result.record),
+      );
+      return envelope;
     } catch (error) {
       if (!cli.noRollback && error instanceof MutationFailureError) {
         await this.rollback(error.created);
@@ -640,18 +1038,24 @@ export class SkeemRuntime {
     const schema = await this.loadSchemaForData(cli);
     const sourceReference = parseRecordReference(sourceInput, "source");
     const sourceCollection = this.resolveCollection(schema, sourceReference.collectionInput);
+    const parsed = parseLinkArguments(relationOrTargetInput, targetInput);
+    const relation = resolveRelation(sourceCollection, parsed.relationInput);
+    const inputRefs = this.buildRelationInputRefs(sourceCollection.name, sourceReference.id, relation.field, parsed.target);
+    const request = this.buildIdempotencyRequest("link", sourceCollection.name, inputRefs);
+
+    const replay = await this.maybeReplayIdempotentWrite(cli, request);
+    if (replay) {
+      return replay;
+    }
 
     try {
       const sourceRecord = await this.adapter.get(sourceCollection.name, sourceReference.id);
-      const parsed = parseLinkArguments(relationOrTargetInput, targetInput);
-      const relation = resolveRelation(sourceCollection, parsed.relationInput);
       const target = await this.resolveLinkTarget(schema, relation, parsed.target, true);
       const mutation = buildLinkMutationPlan(relation, sourceReference.id, target.id);
 
       if (mutation.kind === "m2o") {
         const currentTarget = sourceRecord[relation.field];
         const changed = currentTarget !== target.id;
-        const inputRefs = this.buildRelationInputRefs(sourceCollection.name, sourceReference.id, relation.field, parsed.target);
 
         if (cli.dryRun) {
           return toSuccessEnvelope({
@@ -675,14 +1079,7 @@ export class SkeemRuntime {
         const record = await this.adapter.update(sourceCollection.name, sourceReference.id, {
           [mutation.update!.field]: mutation.update!.value,
         });
-        await this.recordProvenance({
-          collection: sourceCollection.name,
-          recordId: sourceReference.id,
-          operation: "link",
-          cli,
-          inputRefs,
-        });
-        return toSuccessEnvelope({
+        const envelope = toSuccessEnvelope({
           operation: "link",
           action: "linked",
           collection: sourceCollection.name,
@@ -692,11 +1089,18 @@ export class SkeemRuntime {
           },
           plan: [this.buildRelationPlanEntry("link", sourceCollection.name, sourceReference.id, relation, target)],
         });
+        await this.recordProvenance({
+          collection: sourceCollection.name,
+          recordId: sourceReference.id,
+          operation: "link",
+          cli,
+          inputRefs: cli.idempotencyKey ? this.prepareIdempotentInputRefs(request, inputRefs, envelope) : inputRefs,
+        });
+        return envelope;
       }
 
       const existing = await this.adapter.find(mutation.junction!.collection, mutation.junction!.filter, { limit: 1 });
       const changed = existing.length === 0;
-      const inputRefs = this.buildRelationInputRefs(sourceCollection.name, sourceReference.id, relation.field, parsed.target);
 
       if (cli.dryRun) {
         return toSuccessEnvelope({
@@ -726,14 +1130,7 @@ export class SkeemRuntime {
       }
 
       const record = await this.adapter.create(mutation.junction!.collection, mutation.junction!.data);
-      await this.recordProvenance({
-        collection: sourceCollection.name,
-        recordId: sourceReference.id,
-        operation: "link",
-        cli,
-        inputRefs,
-      });
-      return toSuccessEnvelope({
+      const envelope = toSuccessEnvelope({
         operation: "link",
         action: "linked",
         collection: sourceCollection.name,
@@ -743,6 +1140,14 @@ export class SkeemRuntime {
         },
         plan: [this.buildRelationPlanEntry("link", sourceCollection.name, sourceReference.id, relation, target, mutation.junction!.collection)],
       });
+      await this.recordProvenance({
+        collection: sourceCollection.name,
+        recordId: sourceReference.id,
+        operation: "link",
+        cli,
+        inputRefs: cli.idempotencyKey ? this.prepareIdempotentInputRefs(request, inputRefs, envelope) : inputRefs,
+      });
+      return envelope;
     } catch (error) {
       throw this.normalizeError(error, sourceCollection.name);
     }
@@ -757,18 +1162,24 @@ export class SkeemRuntime {
     const schema = await this.loadSchemaForData(cli);
     const sourceReference = parseRecordReference(sourceInput, "source");
     const sourceCollection = this.resolveCollection(schema, sourceReference.collectionInput);
+    const parsed = parseLinkArguments(relationOrTargetInput, targetInput);
+    const relation = resolveRelation(sourceCollection, parsed.relationInput);
+    const inputRefs = this.buildRelationInputRefs(sourceCollection.name, sourceReference.id, relation.field, parsed.target);
+    const request = this.buildIdempotencyRequest("unlink", sourceCollection.name, inputRefs);
+
+    const replay = await this.maybeReplayIdempotentWrite(cli, request);
+    if (replay) {
+      return replay;
+    }
 
     try {
       const sourceRecord = await this.adapter.get(sourceCollection.name, sourceReference.id);
-      const parsed = parseLinkArguments(relationOrTargetInput, targetInput);
-      const relation = resolveRelation(sourceCollection, parsed.relationInput);
       const target = await this.resolveLinkTarget(schema, relation, parsed.target, false);
       const mutation = buildUnlinkMutationPlan(relation, sourceReference.id, target.id);
 
       if (mutation.kind === "m2o") {
         const currentTarget = sourceRecord[relation.field];
         const changed = currentTarget === target.id;
-        const inputRefs = this.buildRelationInputRefs(sourceCollection.name, sourceReference.id, relation.field, parsed.target);
 
         if (cli.dryRun) {
           return toSuccessEnvelope({
@@ -792,14 +1203,7 @@ export class SkeemRuntime {
         const record = await this.adapter.update(sourceCollection.name, sourceReference.id, {
           [mutation.update!.field]: mutation.update!.value,
         });
-        await this.recordProvenance({
-          collection: sourceCollection.name,
-          recordId: sourceReference.id,
-          operation: "unlink",
-          cli,
-          inputRefs,
-        });
-        return toSuccessEnvelope({
+        const envelope = toSuccessEnvelope({
           operation: "unlink",
           action: "unlinked",
           collection: sourceCollection.name,
@@ -809,11 +1213,18 @@ export class SkeemRuntime {
           },
           plan: [this.buildRelationPlanEntry("unlink", sourceCollection.name, sourceReference.id, relation, target)],
         });
+        await this.recordProvenance({
+          collection: sourceCollection.name,
+          recordId: sourceReference.id,
+          operation: "unlink",
+          cli,
+          inputRefs: cli.idempotencyKey ? this.prepareIdempotentInputRefs(request, inputRefs, envelope) : inputRefs,
+        });
+        return envelope;
       }
 
       const existing = await this.adapter.find(mutation.junction!.collection, mutation.junction!.filter, { limit: 100 });
       const removed = existing.length;
-      const inputRefs = this.buildRelationInputRefs(sourceCollection.name, sourceReference.id, relation.field, parsed.target);
 
       if (cli.dryRun) {
         return toSuccessEnvelope({
@@ -852,15 +1263,7 @@ export class SkeemRuntime {
       for (const row of existing) {
         await this.adapter.delete(mutation.junction!.collection, this.recordPrimaryKey(junctionCollection, row));
       }
-      await this.recordProvenance({
-        collection: sourceCollection.name,
-        recordId: sourceReference.id,
-        operation: "unlink",
-        cli,
-        inputRefs,
-      });
-
-      return toSuccessEnvelope({
+      const envelope = toSuccessEnvelope({
         operation: "unlink",
         action: "unlinked",
         collection: sourceCollection.name,
@@ -870,6 +1273,15 @@ export class SkeemRuntime {
         },
         plan: [this.buildRelationPlanEntry("unlink", sourceCollection.name, sourceReference.id, relation, target, mutation.junction!.collection)],
       });
+      await this.recordProvenance({
+        collection: sourceCollection.name,
+        recordId: sourceReference.id,
+        operation: "unlink",
+        cli,
+        inputRefs: cli.idempotencyKey ? this.prepareIdempotentInputRefs(request, inputRefs, envelope) : inputRefs,
+      });
+
+      return envelope;
     } catch (error) {
       throw this.normalizeError(error, sourceCollection.name);
     }
@@ -1006,6 +1418,10 @@ export class SkeemRuntime {
   }
 
   async exec(planInput: ExecPlanInput, cli: CliGlobalOptions): Promise<SuccessEnvelope> {
+    if (cli.idempotencyKey) {
+      throw new UsageError("Idempotency replay is not supported for skeem exec yet.");
+    }
+
     const schema = await this.loadSchemaForData(cli);
     const ordered = topoSortOperations(planInput.operations);
     const context: Record<string, Record<string, unknown>> = {};
@@ -1139,7 +1555,7 @@ export class SkeemRuntime {
     try {
       for (const [segment, childNode] of Object.entries(node.children)) {
         const relation = resolveRelation(collection, segment);
-        const childResult = await this.resolveRelationInput(schema, relation, childNode, [...trail, segment], options.cli);
+        const childResult = await this.resolveRelationInput(schema, relation, childNode, [...trail, segment], this.withoutIdempotencyKey(options.cli));
         data[relation.field] = childResult.id;
         plan.push(...childResult.plan);
         created.push(...childResult.created);
@@ -1182,7 +1598,7 @@ export class SkeemRuntime {
     try {
       for (const [segment, childNode] of Object.entries(node.children)) {
         const relation = resolveRelation(collection, segment);
-        const childResult = await this.resolveRelationInput(schema, relation, childNode, [...trail, segment], options.cli);
+        const childResult = await this.resolveRelationInput(schema, relation, childNode, [...trail, segment], this.withoutIdempotencyKey(options.cli));
         data[relation.field] = childResult.id;
         created.push(...childResult.created);
         plan.push(...childResult.plan);
@@ -1624,6 +2040,14 @@ export class SkeemRuntime {
     await this.ensureSystemCollection(TRASH_COLLECTION);
   }
 
+  private async ensureClaimsStore(): Promise<void> {
+    await this.ensureSystemCollection(CLAIMS_COLLECTION);
+  }
+
+  private async ensureAnnotationStore(): Promise<void> {
+    await this.ensureSystemCollection(ANNOTATIONS_COLLECTION);
+  }
+
   private async findAliasRows(
     filter: Filter,
     options?: { limit?: number },
@@ -1649,6 +2073,46 @@ export class SkeemRuntime {
   ): Promise<EntityRecord[]> {
     try {
       return await this.adapter.find(TRASH_COLLECTION, filter, {
+        ...(options?.limit !== undefined ? { limit: options.limit } : {}),
+        ...(options?.sort ? { sort: options.sort } : {}),
+      });
+    } catch (error) {
+      if (
+        isDirectusRequestError(error) &&
+        (error.status === 404 || (error.status === 403 && /does not exist/i.test(error.message)))
+      ) {
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  private async findClaimRows(
+    filter: Filter,
+    options?: { limit?: number; sort?: string },
+  ): Promise<EntityRecord[]> {
+    try {
+      return await this.adapter.find(CLAIMS_COLLECTION, filter, {
+        ...(options?.limit !== undefined ? { limit: options.limit } : {}),
+        ...(options?.sort ? { sort: options.sort } : {}),
+      });
+    } catch (error) {
+      if (
+        isDirectusRequestError(error) &&
+        (error.status === 404 || (error.status === 403 && /does not exist/i.test(error.message)))
+      ) {
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  private async findProvenanceRows(
+    filter: Filter,
+    options?: { limit?: number; sort?: string },
+  ): Promise<EntityRecord[]> {
+    try {
+      return await this.adapter.find(PROVENANCE_COLLECTION, filter, {
         ...(options?.limit !== undefined ? { limit: options.limit } : {}),
         ...(options?.sort ? { sort: options.sort } : {}),
       });
@@ -1734,6 +2198,98 @@ export class SkeemRuntime {
     }));
   }
 
+  private buildIdempotencyRequest(operation: string, collection: string, input: unknown): IdempotencyRequest {
+    return {
+      operation,
+      collection,
+      input,
+    };
+  }
+
+  private async maybeReplayIdempotentWrite(cli: CliGlobalOptions, request: IdempotencyRequest): Promise<SuccessEnvelope | null> {
+    if (cli.dryRun || !cli.idempotencyKey) {
+      return null;
+    }
+
+    await this.ensureProvenanceStore();
+    const rows = await this.findProvenanceRows({
+      idempotency_key: cli.idempotencyKey,
+    }, {
+      limit: 10,
+      sort: "-created_at",
+    });
+    if (rows.length === 0) {
+      return null;
+    }
+
+    const matches = rows
+      .map((row) => ({ row, metadata: extractIdempotencyMetadata(row.input_refs) }))
+      .filter((entry) => entry.metadata && idempotencyRequestsMatch(entry.metadata.request, request));
+
+    if (matches.length === 1) {
+      return toSuccessEnvelope(matches[0]!.metadata!.response);
+    }
+
+    if (matches.length > 1) {
+      throw new ValidationError(request.collection, "idempotency_key", `Idempotency key "${cli.idempotencyKey}" matched multiple stored responses and cannot be replayed safely.`);
+    }
+
+    if (rows.length === 1 && extractIdempotencyMetadata(rows[0]!.input_refs) === null) {
+      throw new ValidationError(request.collection, "idempotency_key", `Idempotency key "${cli.idempotencyKey}" exists but predates replay metadata support.`);
+    }
+
+    throw new ValidationError(request.collection, "idempotency_key", `Idempotency key "${cli.idempotencyKey}" is already associated with a different request.`);
+  }
+
+  private prepareIdempotentInputRefs(
+    request: IdempotencyRequest,
+    rawInputRefs: unknown,
+    envelope: SuccessEnvelope,
+  ): unknown {
+    const { ok: _ok, ...response } = envelope;
+    return attachIdempotencyMetadata(rawInputRefs, request, response);
+  }
+
+  private async persistIdempotentReplay(
+    cli: CliGlobalOptions,
+    request: IdempotencyRequest,
+    rawInputRefs: unknown,
+    envelope: SuccessEnvelope,
+    recordId: PrimaryKey,
+  ): Promise<void> {
+    if (!cli.idempotencyKey) {
+      return;
+    }
+
+    const rows = await this.findProvenanceRows({
+      idempotency_key: cli.idempotencyKey,
+      collection: request.collection,
+      record_id: String(recordId),
+      operation: request.operation,
+    }, {
+      limit: 5,
+      sort: "-created_at",
+    });
+    const provenance = rows[0];
+    const provenanceId = this.extractSystemRecordId(provenance);
+    if (provenanceId === undefined) {
+      throw new ValidationError(request.collection, "idempotency_key", `Idempotency key "${cli.idempotencyKey}" could not be attached to provenance metadata.`);
+    }
+
+    await this.adapter.update(PROVENANCE_COLLECTION, provenanceId, {
+      input_refs: this.prepareIdempotentInputRefs(request, rawInputRefs, envelope),
+    });
+  }
+
+  private withoutIdempotencyKey(cli: CliGlobalOptions): CliGlobalOptions {
+    if (!cli.idempotencyKey) {
+      return cli;
+    }
+
+    const { idempotencyKey: _idempotencyKey, ...rest } = cli;
+    return rest;
+  }
+
   private async recordVersion(input: {
     collection: Collection;
     recordId: PrimaryKey;
@@ -1777,6 +2333,32 @@ export class SkeemRuntime {
       config: this.config,
       ...(provenanceId !== undefined ? { provenanceId } : {}),
     }));
+  }
+
+  private async loadClaimState(collection: string, recordId: PrimaryKey): Promise<{ active: EntityRecord[]; expired: EntityRecord[] }> {
+    const rows = await this.findClaimRows({
+      collection,
+      record_id: String(recordId),
+    }, {
+      limit: 100,
+      sort: "-lease_until",
+    });
+    const active: EntityRecord[] = [];
+    const expired: EntityRecord[] = [];
+
+    for (const row of rows) {
+      if (isClaimActive(row)) {
+        active.push(row);
+      } else {
+        expired.push(row);
+      }
+    }
+
+    for (const row of expired) {
+      await this.cleanupSystemRecordBestEffort(CLAIMS_COLLECTION, row);
+    }
+
+    return { active, expired };
   }
 
   private async readLatestVersion(collection: string, recordId: PrimaryKey): Promise<number> {
