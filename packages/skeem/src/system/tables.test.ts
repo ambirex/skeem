@@ -7,7 +7,14 @@ describe("system tables", () => {
   test("lists supported system collections", () => {
     const definitions = listSupportedSystemCollections();
 
-    expect(definitions.map((definition) => definition.name)).toEqual(["skeem_aliases", "skeem_provenance", "skeem_versions", "skeem_trash"]);
+    expect(definitions.map((definition) => definition.name)).toEqual([
+      "skeem_aliases",
+      "skeem_provenance",
+      "skeem_versions",
+      "skeem_trash",
+      "skeem_claims",
+      "skeem_annotations",
+    ]);
     expect(definitions[0]?.fields.map((field) => field.name)).toEqual([
       "collection",
       "record_id",
@@ -43,6 +50,23 @@ describe("system tables", () => {
       "deleted_by",
       "provenance_id",
       "deleted_at",
+      "expires_at",
+    ]);
+    expect(definitions[4]?.fields.map((field) => field.name)).toEqual([
+      "collection",
+      "record_id",
+      "claimed_by",
+      "purpose",
+      "lease_until",
+      "created_at",
+    ]);
+    expect(definitions[5]?.fields.map((field) => field.name)).toEqual([
+      "collection",
+      "record_id",
+      "key",
+      "value",
+      "actor",
+      "created_at",
       "expires_at",
     ]);
   });
@@ -81,6 +105,16 @@ describe("system tables", () => {
         exists: false,
         supported: true,
       }),
+      expect.objectContaining({
+        collection: "skeem_claims",
+        exists: false,
+        supported: true,
+      }),
+      expect.objectContaining({
+        collection: "skeem_annotations",
+        exists: false,
+        supported: true,
+      }),
     ]);
   });
 
@@ -89,6 +123,8 @@ describe("system tables", () => {
     expect(getSystemCollectionDefinition("skeem_provenance")?.purpose).toContain("provenance");
     expect(getSystemCollectionDefinition("skeem_versions")?.purpose).toContain("Version history");
     expect(getSystemCollectionDefinition("skeem_trash")?.purpose).toContain("Soft-delete");
+    expect(getSystemCollectionDefinition("skeem_claims")?.purpose).toContain("coordination");
+    expect(getSystemCollectionDefinition("skeem_annotations")?.purpose).toContain("metadata");
     expect(getSystemCollectionDefinition("missing")).toBeUndefined();
   });
 });

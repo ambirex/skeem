@@ -26,7 +26,10 @@ The goal of the original next slices was to close the biggest Phase 1 gaps befor
 - Completed: Slice 12: Provenance Tracking Foundation
 - Completed: Slice 13: Version History Foundation
 - Completed: Slice 14: Soft Delete and Restore Foundation
-- Next logical step: Slice 15: Claims and Coordination Foundation
+- Completed: Slice 15: Claims and Coordination Foundation
+- Completed: Slice 16: Annotations Foundation
+- Completed: Slice 17: Idempotency Foundation
+- Next logical step: Slice 18: Extension Registry Foundation
 
 ## Slice 1: Discovery Completeness
 
@@ -754,7 +757,7 @@ Version history is in place, so the next logical step is to stop losing deleted 
 
 ## Slice 15: Claims and Coordination Foundation
 
-Status: next
+Status: completed
 
 ### Why now
 
@@ -789,6 +792,193 @@ The data lifecycle is now much safer: writes are auditable, updates are versione
 
 - Concurrent agents can coordinate on a record using lightweight leases without inventing external locking infrastructure
 
+### Completion Notes
+
+- Added `skeem_claims` to the supported system-table set and `skeem init` provisioning flow
+- Added `skeem claim <collection:id> --lease <duration>`
+- Added `skeem claims <collection:id>`
+- Added `skeem release <collection:id>`
+- Added shared lease helpers for:
+- duration parsing
+- expiration checks
+- actor resolution from CLI or config
+- Implemented runtime behavior so:
+- `claim` auto-provisions the claim store on first write
+- expired leases are ignored and cleaned up best-effort
+- conflicting active claims fail with a validation error
+- release validates ownership before deleting active claim rows
+- Added unit coverage for:
+- lease parsing
+- lease expiry detection
+- actor resolution
+- Extended the Directus smoke harness to validate:
+- `init` status and provisioning for `skeem_claims`
+- claim acquisition and status reads
+- wrong-owner release rejection
+- explicit release
+- expired lease cleanup and reacquire
+
+## Slice 16: Annotations Foundation
+
+Status: completed
+
+### Why now
+
+Claims let multiple agents avoid stepping on each other. The next small but high-value runtime primitive is lightweight metadata about records that should not live in the source schema itself.
+
+### Scope
+
+- Introduce the minimal `skeem_annotations` system-table definition and provisioning support
+- Add `skeem annotate <collection:id> --key <name> --value <json>`
+- Support optional TTL via `--expires <duration>`
+- Keep annotation querying on the existing `find skeem_annotations ...` path for now
+- Defer annotation indexes, policy controls, and higher-level query sugar
+
+### Deliverables
+
+- `skeem init` support for provisioning `skeem_annotations`
+- Annotation writes that store collection, record id, key, parsed JSON value, actor, and expiry metadata
+- Shared duration parsing or expiry helpers where that avoids drift with claims/trash behavior
+- Unit or integration coverage for:
+- JSON value parsing
+- expiry shaping
+- actor metadata
+- Smoke coverage that:
+- writes an annotation
+- reads it back through `find skeem_annotations`
+- verifies expiry metadata is persisted when requested
+
+### Exit criteria
+
+- Agents can attach scoped metadata to records without polluting business collections or inventing ad hoc side tables
+
+### Completion Notes
+
+- Added `skeem_annotations` to the supported system-table set and `skeem init` provisioning flow
+- Added `skeem annotate <collection:id> --key <name> --value <json> [--expires <duration>]`
+- Added shared annotation helpers for:
+- JSON value parsing
+- key normalization
+- actor fallback from CLI or config
+- optional expiry timestamp shaping
+- Factored duration parsing into a shared helper used by both claims and annotations
+- Implemented runtime behavior so:
+- `annotate` verifies the target record exists
+- the annotation store is auto-provisioned on first write
+- `--dry-run` previews the annotation payload and plan
+- annotations are written as append-only metadata rows
+- Extended the Directus smoke harness to validate:
+- `init` status and provisioning for `skeem_annotations`
+- annotation dry-run
+- numeric and string annotation writes
+- reading annotations back through `find skeem_annotations`
+- expiry metadata persistence
+
+## Slice 17: Idempotency Foundation
+
+Status: completed
+
+### Why now
+
+The runtime now has most of the write primitives in place, plus provenance rows that already store idempotency keys. The next logical step is turning that stored metadata into actual replay protection for repeated write requests.
+
+### Scope
+
+- Add shared idempotency lookup and replay logic backed by `skeem_provenance`
+- Support idempotent replays for the highest-value write verbs first:
+- `create`
+- `update`
+- `delete`
+- `upsert`
+- `link`
+- `unlink`
+- `annotate`
+- Defer full schema-write parity until the core data verbs are proven
+
+### Deliverables
+
+- Runtime helpers that detect an existing `--idempotency-key` before executing a write
+- Stable replay envelopes that return the original result shape instead of mutating again
+- Clear provenance conventions for storing any replay metadata needed by the runtime
+- Unit or integration coverage for:
+- first execution vs replay
+- mismatched payloads with the same key
+- replay across multiple write verbs
+- Smoke coverage that:
+- reruns a create with the same idempotency key
+- verifies no duplicate row is created
+- reruns another write verb with the same key and gets a stable replay result
+
+### Exit criteria
+
+- Repeating a write with the same idempotency key becomes safe and predictable for agents and automation
+
+### Completion Notes
+
+- Added shared idempotency helpers for:
+- request matching
+- replay metadata storage inside provenance input refs
+- replay metadata extraction for future requests
+- Added top-level idempotency replay support for:
+- `create`
+- `update`
+- `delete`
+- `upsert`
+- `link`
+- `unlink`
+- `annotate`
+- Added request-shape validation so reusing the same idempotency key for a different request fails with a validation error
+- Kept `skeem exec` explicitly out of scope for now with a clear usage error instead of ambiguous partial behavior
+- Prevented nested compound child writes from reusing top-level idempotency keys, so replay remains unambiguous for root operations
+- Added unit coverage for:
+- metadata attachment and extraction
+- request matching
+- mismatch detection helpers
+- Extended the Directus smoke harness to validate:
+- create replay without duplicates
+- mismatch rejection for reused keys
+- update replay without extra version rows
+- upsert replay
+- delete replay without extra trash rows
+- link and unlink replay
+- annotate replay without duplicate annotation rows
+
+## Slice 18: Extension Registry Foundation
+
+Status: next
+
+### Why now
+
+The core runtime is now covering the main system-table and data-operation foundations described in Part IV. The next major product surface in the spec is the extension system, and the smallest sensible start is the registry and status layer before full installation flows.
+
+### Scope
+
+- Introduce the minimal `skeem_extensions` system-table definition and provisioning support
+- Add read-only or low-risk extension commands first:
+- `skeem extend list`
+- `skeem extend status`
+- Add manifest loading primitives for local extension packages
+- Defer full install/apply hooks and custom command loading until the registry shape is proven
+
+### Deliverables
+
+- `skeem init` support for provisioning `skeem_extensions`
+- Shared manifest parsing for `skeem-extension.yaml`
+- `extend list` output for discovered local or bundled extension manifests
+- `extend status` output backed by `skeem_extensions`
+- Unit or integration coverage for:
+- manifest parsing
+- registry row shaping
+- list/status output
+- Smoke coverage that:
+- provisions `skeem_extensions`
+- reads at least one manifest fixture
+- records or reports extension status cleanly
+
+### Exit criteria
+
+- The repo has a real extension registry foundation that future install/apply work can build on without redesigning the CLI or system table
+
 ## Recommended Order
 
 1. Slice 1: Discovery Completeness
@@ -806,6 +996,9 @@ The data lifecycle is now much safer: writes are auditable, updates are versione
 13. Slice 13: Version History Foundation
 14. Slice 14: Soft Delete and Restore Foundation
 15. Slice 15: Claims and Coordination Foundation
+16. Slice 16: Annotations Foundation
+17. Slice 17: Idempotency Foundation
+18. Slice 18: Extension Registry Foundation
 
 ## Not Next
 

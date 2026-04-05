@@ -92,6 +92,39 @@ const SYSTEM_COLLECTIONS: SystemCollectionDefinition[] = [
       "Expiry and purge behavior are deferred until broader trash lifecycle support lands.",
     ],
   },
+  {
+    name: "skeem_claims",
+    purpose: "Lease-based coordination for shared record work.",
+    fields: [
+      { name: "collection", type: "string", required: true },
+      { name: "record_id", type: "string", required: true },
+      { name: "claimed_by", type: "string", required: true },
+      { name: "purpose", type: "string" },
+      { name: "lease_until", type: "datetime", required: true },
+      { name: "created_at", type: "datetime" },
+    ],
+    notes: [
+      "Composite uniqueness for (collection, record_id) is currently enforced in the runtime until adapter-level composite constraints land.",
+      "Expired leases are ignored by read paths and cleaned up best-effort during claim operations.",
+    ],
+  },
+  {
+    name: "skeem_annotations",
+    purpose: "Record-scoped metadata that stays out of business schemas.",
+    fields: [
+      { name: "collection", type: "string", required: true },
+      { name: "record_id", type: "string", required: true },
+      { name: "key", type: "string", required: true },
+      { name: "value", type: "json", required: true },
+      { name: "actor", type: "string" },
+      { name: "created_at", type: "datetime" },
+      { name: "expires_at", type: "datetime" },
+    ],
+    notes: [
+      "Annotations are append-only metadata rows for now; higher-level query and merge semantics are deferred.",
+      "Expiry metadata is stored now; lifecycle cleanup and automatic filtering are deferred.",
+    ],
+  },
 ];
 
 export function listSupportedSystemCollections(): SystemCollectionDefinition[] {

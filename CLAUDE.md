@@ -4,34 +4,28 @@ Use `AGENTS.md` as the canonical repo guidance and keep this file aligned with i
 
 ## Project Context
 
-- This repo is implementing `skeem` from the specification in `README.md`.
-- The repo is intentionally early-stage; do not assume missing structure is accidental.
-- Read the relevant README sections before making architectural decisions.
+- This repo is a working implementation of `skeem`, not an empty scaffold.
+- Start with `README.md` and `docs/README.md` for current behavior, then use `docs/spec/full-spec.md` for deeper design context.
+- Use `docs/next-slices.md` when the user asks for the next logical slice.
 
 ## Default Mission
 
-- Stay focused on Phase 1 MVP unless the user explicitly asks for later phases.
-- Prioritize the following work:
-- Monorepo scaffold.
-- TypeScript CLI foundation.
-- Config loading.
-- Directus data adapter.
-- Schema cache.
-- Discovery commands.
-- CRUD commands.
-- Relation resolution and compound execution.
-- Stable `--json` output.
+- Extend the existing Directus-first CLI cleanly and incrementally.
+- Prefer the next documented roadmap slice unless the user redirects.
+- Keep the tool reliable for agents: stable JSON, good docs, and end-to-end smoke coverage.
 
 ## Guardrails
 
-- `README.md` is the source of truth for commands, flags, package layout, and feature boundaries.
+- `AGENTS.md` is the canonical repo guidance.
+- `README.md` and `docs/README.md` describe the current repo surface.
+- `docs/spec/full-spec.md` preserves the original full design.
 - Keep core logic backend-agnostic and Directus logic adapter-specific.
-- Do not implement system tables, extensions, extra adapters, FUSE, or Swift surfaces unless asked.
-- Avoid spec drift: if behavior is unclear, choose the narrowest Phase 1-compatible interpretation.
+- Keep docs, smoke coverage, and behavior aligned.
+- Avoid spec drift: if behavior is unclear, choose the smallest consistent interpretation and document the edge.
 
 ## Implementation Notes
 
-- Favor small vertical slices over broad scaffolding with no end-to-end path.
+- Favor small vertical slices over broad speculative framework work.
 - Keep JSON output contracts stable and easy for agents to parse.
-- Add tests as features land, especially around parser, cache, adapter mapping, and execution flow.
-- Prefer explicit TODOs over speculative architecture for later phases.
+- Add or update smoke coverage when behavior changes materially.
+- Prefer explicit roadmap notes over hand-wavy future architecture.
