@@ -9,6 +9,10 @@
   "scripts": {
     "build": "npm run build --workspaces",
     "dev": "npm run dev --workspace @skeem/cli",
+    "eval:run": "npm run build && node ./test/evals/run.mjs",
+    "eval:nano-gpt:models": "node ./test/evals/providers/nano-gpt-models.mjs",
+    "eval:provider:sample": "npm run build && node ./test/evals/run.mjs --case ./test/evals/cases/01-discovery-and-read.json --provider command --provider-command 'node ./test/evals/providers/sample-command-provider.mjs'",
+    "eval:sample": "npm run build && node ./test/evals/run.mjs --case ./test/evals/cases/01-discovery-and-read.json --transcript ./test/evals/transcripts/01-discovery-and-read.sample.json",
     "smoke:directus": "npm run build && node ./test/smoke/directus-ls.mjs",
     "smoke:directus:ls": "npm run build && node ./test/smoke/directus-ls.mjs",
     "test": "npm run test --workspaces --if-present",

@@ -5,3 +5,6 @@ dist
 coverage/
 *.log
 test/.tmp/
+test/evals/results/
+.env
+.DS_Store
