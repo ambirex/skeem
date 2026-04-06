@@ -1,0 +1,28 @@
+{
+  "id": "claim-and-annotate",
+  "title": "Coordinate shared work on a record",
+  "category": "coordination",
+  "goal": "Claim Acme for enrichment work, leave a note, and release the claim when done.",
+  "assumptions": [
+    "Claims and annotations make sense to models as coordination primitives.",
+    "Agents will include actor identity when asked to coordinate shared work."
+  ],
+  "allowed_commands": [
+    "skeem init --json",
+    "skeem find companies ... --json",
+    "skeem claim companies:<id> --lease <duration> --purpose ... --actor <name> --json",
+    "skeem annotate companies:<id> --key <name> --value <json> --actor <name> --json",
+    "skeem release companies:<id> --actor <name> --json"
+  ],
+  "prompt": "Pretend you are a shared agent named eval-agent. Claim Acme for enrichment, leave a note that work has started, and release the claim when complete.",
+  "success_checks": [
+    "A claim is acquired with the expected actor",
+    "An annotation note is written",
+    "The claim is released by the same actor"
+  ],
+  "failure_modes": [
+    "No actor used",
+    "Claim is never released",
+    "Annotation is written to the wrong record"
+  ]
+}

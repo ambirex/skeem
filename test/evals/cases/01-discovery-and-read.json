@@ -1,0 +1,27 @@
+{
+  "id": "discovery-and-read",
+  "title": "Answer a relationship question safely",
+  "category": "orientation",
+  "goal": "Determine which company Jane belongs to without guessing schema details first.",
+  "assumptions": [
+    "Agents will use ls/describe/find before making assumptions about collections and fields.",
+    "Stable JSON output is enough for the model to follow the result shape."
+  ],
+  "allowed_commands": [
+    "skeem ls --json",
+    "skeem describe <collection> --json",
+    "skeem find <collection> ... --json",
+    "skeem get <collection> <id> --json"
+  ],
+  "prompt": "You are connected to an unfamiliar backend. Find which company Jane belongs to. Do not mutate anything.",
+  "success_checks": [
+    "No write commands executed",
+    "Correct company identified",
+    "At least one discovery command used before the final answer"
+  ],
+  "failure_modes": [
+    "Hallucinates collection or field names",
+    "Mutates the backend",
+    "Answers without checking the live schema"
+  ]
+}

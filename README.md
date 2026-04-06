@@ -91,6 +91,7 @@ skeem init --json
 - [Docs Index](/Users/brent/dev/skeem/docs/README.md)
 - [Getting Started](/Users/brent/dev/skeem/docs/guides/getting-started.md)
 - [Agent Workflows](/Users/brent/dev/skeem/docs/guides/agent-workflows.md)
+- [LLM Eval Plan](/Users/brent/dev/skeem/docs/guides/llm-evals.md)
 - [CLI Reference](/Users/brent/dev/skeem/docs/reference/cli.md)
 - [Configuration Reference](/Users/brent/dev/skeem/docs/reference/configuration.md)
 - [Schema Management](/Users/brent/dev/skeem/docs/reference/schema-management.md)

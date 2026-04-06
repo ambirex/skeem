@@ -1,0 +1,26 @@
+{
+  "id": "retriable-update",
+  "title": "Perform a safe retriable mutation",
+  "category": "recoverability",
+  "goal": "Update Acme's industry to Robotics using a write pattern that is safe to retry.",
+  "assumptions": [
+    "Agents will use idempotency when the harness hints that retries may occur.",
+    "skeem's idempotency support materially reduces duplicate side effects."
+  ],
+  "allowed_commands": [
+    "skeem find companies ... --json",
+    "skeem update companies <id> ... --json --idempotency-key <key>",
+    "skeem upsert companies ... --json --idempotency-key <key>"
+  ],
+  "prompt": "Update Acme's industry to Robotics. The call may be replayed, so use a retry-safe approach.",
+  "success_checks": [
+    "Acme's industry becomes Robotics",
+    "The write includes an idempotency key",
+    "Replaying the same write does not create extra side effects"
+  ],
+  "failure_modes": [
+    "No idempotency key used",
+    "Multiple conflicting writes created on replay",
+    "Wrong company updated"
+  ]
+}

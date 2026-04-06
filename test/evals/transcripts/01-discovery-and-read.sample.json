@@ -1,0 +1,24 @@
+{
+  "steps": [
+    {
+      "type": "command",
+      "command": "skeem ls --json"
+    },
+    {
+      "type": "command",
+      "command": "skeem describe people --json"
+    },
+    {
+      "type": "command",
+      "command": "skeem find people --where name=Jane --json"
+    },
+    {
+      "type": "command",
+      "command": "skeem get companies 1 --json"
+    },
+    {
+      "type": "answer",
+      "text": "Jane belongs to Acme."
+    }
+  ]
+}

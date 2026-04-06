@@ -1,0 +1,29 @@
+{
+  "id": "relational-create",
+  "title": "Create a related record with minimal ceremony",
+  "category": "relational-write",
+  "goal": "Create a person named Mia and attach her to the existing company Acme.",
+  "assumptions": [
+    "Relation-aware skeem operations are easier for models than raw multi-call API workflows.",
+    "Agents can discover the right relation field before writing."
+  ],
+  "allowed_commands": [
+    "skeem ls --json",
+    "skeem describe people --json",
+    "skeem find companies ... --json",
+    "skeem create people ... --json",
+    "skeem upsert ... --json",
+    "skeem link ... --json"
+  ],
+  "prompt": "Create a new person named Mia and associate her with the existing company Acme. Prefer the smallest safe number of steps.",
+  "success_checks": [
+    "Exactly one new person record named Mia exists",
+    "Mia is related to Acme correctly",
+    "No duplicate company records created"
+  ],
+  "failure_modes": [
+    "Creates a duplicate company",
+    "Writes to the wrong relation field",
+    "Skips discovery and guesses the schema"
+  ]
+}
