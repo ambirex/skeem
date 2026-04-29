@@ -183,9 +183,15 @@ export interface ResolvedConfig {
     exclude: string[];
   };
   extensions: Record<string, unknown>;
+  sources: Record<string, ReadSourceConnectionConfig>;
   cache: {
     ttlMs: number;
   };
+}
+
+export interface ReadSourceConnectionConfig {
+  type: string;
+  [key: string]: unknown;
 }
 
 export interface CacheMeta {

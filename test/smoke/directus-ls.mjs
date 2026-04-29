@@ -20,6 +20,12 @@ const defineDestructivePath = path.join(fixtureRoot, "schema-define-destructive.
 const configWorkspaceDir = path.join(fixtureRoot, "config-workspace");
 const configNestedDir = path.join(configWorkspaceDir, "nested", "child");
 const configPath = path.join(configWorkspaceDir, ".skeemrc.yaml");
+const extensionWorkspaceDir = path.join(fixtureRoot, "extension-workspace");
+const extensionFixtureManifestDir = path.join(extensionWorkspaceDir, "extensions", "extend-fixture");
+const extensionFixtureManifestPath = path.join(extensionFixtureManifestDir, "skeem-extension.yaml");
+const extensionWorkspaceConfigPath = path.join(extensionWorkspaceDir, ".skeemrc.yaml");
+const sourceWorkspaceDir = path.join(fixtureRoot, "source-workspace");
+const sourceWorkspaceConfigPath = path.join(sourceWorkspaceDir, ".skeemrc.yaml");
 
 const directusVersion = "11.17.1";
 const sqliteVersion = "6.0.1";
@@ -268,7 +274,8 @@ try {
     initStatusBefore.data.find((entry) => entry.collection === "skeem_versions")?.exists !== false ||
     initStatusBefore.data.find((entry) => entry.collection === "skeem_trash")?.exists !== false ||
     initStatusBefore.data.find((entry) => entry.collection === "skeem_claims")?.exists !== false ||
-    initStatusBefore.data.find((entry) => entry.collection === "skeem_annotations")?.exists !== false
+    initStatusBefore.data.find((entry) => entry.collection === "skeem_annotations")?.exists !== false ||
+    initStatusBefore.data.find((entry) => entry.collection === "skeem_extensions")?.exists !== false
   ) {
     throw new Error(`Init status before apply was unexpected:\n${JSON.stringify(initStatusBefore, null, 2)}`);
   }
@@ -283,7 +290,8 @@ try {
     !initApply.data.applied.includes("skeem_versions") ||
     !initApply.data.applied.includes("skeem_trash") ||
     !initApply.data.applied.includes("skeem_claims") ||
-    !initApply.data.applied.includes("skeem_annotations")
+    !initApply.data.applied.includes("skeem_annotations") ||
+    !initApply.data.applied.includes("skeem_extensions")
   ) {
     throw new Error(`Init apply failed:\n${JSON.stringify(initApply, null, 2)}`);
   }
@@ -297,7 +305,8 @@ try {
     initStatusAfter.data.find((entry) => entry.collection === "skeem_versions")?.exists !== true ||
     initStatusAfter.data.find((entry) => entry.collection === "skeem_trash")?.exists !== true ||
     initStatusAfter.data.find((entry) => entry.collection === "skeem_claims")?.exists !== true ||
-    initStatusAfter.data.find((entry) => entry.collection === "skeem_annotations")?.exists !== true
+    initStatusAfter.data.find((entry) => entry.collection === "skeem_annotations")?.exists !== true ||
+    initStatusAfter.data.find((entry) => entry.collection === "skeem_extensions")?.exists !== true
   ) {
     throw new Error(`Init status after apply was unexpected:\n${JSON.stringify(initStatusAfter, null, 2)}`);
   }
@@ -305,6 +314,430 @@ try {
   const initAgain = await runSkeemJson(["init"]);
   if (!initAgain.ok || initAgain.action !== "noop" || initAgain.data?.applied?.length !== 0) {
     throw new Error(`Init should be idempotent on repeat runs:\n${JSON.stringify(initAgain, null, 2)}`);
+  }
+
+  await prepareExtensionWorkspace();
+
+  const extendListEnvelope = await runSkeemJson(["extend", "list"], {
+    cwd: extensionWorkspaceDir,
+    skipConnectionFlags: true,
+    env: { SKEEM_SMOKE_TOKEN: adminToken },
+  });
+  if (
+    !extendListEnvelope.ok ||
+    extendListEnvelope.operation !== "extend_list" ||
+    extendListEnvelope.count !== 1 ||
+    extendListEnvelope.data[0]?.name !== "fixture" ||
+    extendListEnvelope.data[0]?.version !== "0.1.0" ||
+    extendListEnvelope.data[0]?.manifest_path !== extensionFixtureManifestPath
+  ) {
+    throw new Error(`Extend list failed:\n${JSON.stringify(extendListEnvelope, null, 2)}`);
+  }
+
+  const extendStatusAvailable = await runSkeemJson(["extend", "status"], {
+    cwd: extensionWorkspaceDir,
+    skipConnectionFlags: true,
+    env: { SKEEM_SMOKE_TOKEN: adminToken },
+  });
+  if (
+    !extendStatusAvailable.ok ||
+    extendStatusAvailable.data?.registry?.provisioned !== true ||
+    extendStatusAvailable.data?.registry?.collection !== "skeem_extensions" ||
+    extendStatusAvailable.data?.summary?.available !== 1 ||
+    extendStatusAvailable.data?.summary?.installed !== 0 ||
+    extendStatusAvailable.data?.entries?.[0]?.state !== "available"
+  ) {
+    throw new Error(`Extend status should report fixture as available:\n${JSON.stringify(extendStatusAvailable, null, 2)}`);
+  }
+
+  const extendInstalled = await runSkeemJson([
+    "create",
+    "skeem_extensions",
+    "--name",
+    "fixture",
+    "--version",
+    "0.1.0",
+    "--installed_by",
+    "smoke-test",
+  ]);
+  if (!extendInstalled.ok || extendInstalled.data?.name !== "fixture") {
+    throw new Error(`Inserting a fake installed extension row failed:\n${JSON.stringify(extendInstalled, null, 2)}`);
+  }
+
+  const extendStatusInstalled = await runSkeemJson(["extend", "status"], {
+    cwd: extensionWorkspaceDir,
+    skipConnectionFlags: true,
+    env: { SKEEM_SMOKE_TOKEN: adminToken },
+  });
+  if (
+    !extendStatusInstalled.ok ||
+    extendStatusInstalled.data?.summary?.installed !== 1 ||
+    extendStatusInstalled.data?.summary?.available !== 0 ||
+    extendStatusInstalled.data?.entries?.[0]?.state !== "installed" ||
+    extendStatusInstalled.data?.entries?.[0]?.installed?.installedBy !== "smoke-test"
+  ) {
+    throw new Error(`Extend status after install should match installed row:\n${JSON.stringify(extendStatusInstalled, null, 2)}`);
+  }
+
+  const extensionRowId = extendInstalled.data?.id;
+  if (extensionRowId !== undefined) {
+    const cleanup = await runSkeemJson([
+      "delete",
+      "skeem_extensions",
+      String(extensionRowId),
+      "--hard",
+    ]);
+    if (!cleanup.ok) {
+      throw new Error(`Failed to clean up fixture extension row:\n${JSON.stringify(cleanup, null, 2)}`);
+    }
+  }
+
+  await prepareSourceWorkspace();
+
+  const sourceListEnvelope = await runSkeemJson(["source", "list"], {
+    cwd: sourceWorkspaceDir,
+    skipConnectionFlags: true,
+    env: {
+      SKEEM_SMOKE_TOKEN: adminToken,
+      TMDB_API_KEY: process.env.TMDB_API_KEY ?? "smoke-fixture-key",
+    },
+  });
+  if (
+    !sourceListEnvelope.ok ||
+    sourceListEnvelope.operation !== "source_list" ||
+    !Array.isArray(sourceListEnvelope.data?.configured) ||
+    sourceListEnvelope.data.configured.find((entry) => entry.name === "movies")?.type !== "tmdb" ||
+    sourceListEnvelope.data.configured.find((entry) => entry.name === "books")?.type !== "openlibrary" ||
+    sourceListEnvelope.data.configured.find((entry) => entry.name === "books")?.supported !== true ||
+    sourceListEnvelope.data.configured.find((entry) => entry.name === "entities")?.type !== "wikidata" ||
+    sourceListEnvelope.data.configured.find((entry) => entry.name === "entities")?.supported !== true ||
+    !Array.isArray(sourceListEnvelope.data?.supported_types) ||
+    !sourceListEnvelope.data.supported_types.includes("tmdb") ||
+    !sourceListEnvelope.data.supported_types.includes("openlibrary") ||
+    !sourceListEnvelope.data.supported_types.includes("wikidata")
+  ) {
+    throw new Error(`Source list did not surface all three configured sources:\n${JSON.stringify(sourceListEnvelope, null, 2)}`);
+  }
+
+  const sourceDiscoverEnvelope = await runSkeemJson(["source", "discover", "movies"], {
+    cwd: sourceWorkspaceDir,
+    skipConnectionFlags: true,
+    env: {
+      SKEEM_SMOKE_TOKEN: adminToken,
+      TMDB_API_KEY: process.env.TMDB_API_KEY ?? "smoke-fixture-key",
+    },
+  });
+  const moviesCollection = sourceDiscoverEnvelope.data?.schema?.collections?.find?.((c) => c.name === "movies");
+  if (
+    !sourceDiscoverEnvelope.ok ||
+    sourceDiscoverEnvelope.operation !== "source_discover" ||
+    sourceDiscoverEnvelope.data?.source !== "movies" ||
+    sourceDiscoverEnvelope.data?.type !== "tmdb" ||
+    !moviesCollection ||
+    moviesCollection.primaryKey !== "id" ||
+    !Array.isArray(moviesCollection.fields) ||
+    !moviesCollection.fields.some((field) => field.name === "title")
+  ) {
+    throw new Error(`Source discover did not return the curated movies schema:\n${JSON.stringify(sourceDiscoverEnvelope, null, 2)}`);
+  }
+
+  const sourceUnsupportedDiscover = await runSkeemJson(["source", "discover", "ghost"], {
+    cwd: sourceWorkspaceDir,
+    skipConnectionFlags: true,
+    env: {
+      SKEEM_SMOKE_TOKEN: adminToken,
+      TMDB_API_KEY: process.env.TMDB_API_KEY ?? "smoke-fixture-key",
+    },
+    expectFailure: true,
+  });
+  if (sourceUnsupportedDiscover.ok || !/not configured/i.test(sourceUnsupportedDiscover.error?.message ?? "")) {
+    throw new Error(`Discovering an unconfigured source should fail:\n${JSON.stringify(sourceUnsupportedDiscover, null, 2)}`);
+  }
+
+  const tmdbBridgeCompany = await runSkeemJson(["create", "companies", "--name", "Acme Pictures"]);
+  if (!tmdbBridgeCompany.ok || tmdbBridgeCompany.data?.name !== "Acme Pictures") {
+    throw new Error(`Failed to create TMDB-bridge fixture company:\n${JSON.stringify(tmdbBridgeCompany, null, 2)}`);
+  }
+  const tmdbBridgeCompanyId = tmdbBridgeCompany.data?.id;
+
+  const tmdbAliasAdd = await runSkeemJson([
+    "alias",
+    "add",
+    `companies:${tmdbBridgeCompanyId}`,
+    "tmdb:movie:27205",
+  ]);
+  if (!tmdbAliasAdd.ok || tmdbAliasAdd.data?.alias !== "tmdb:movie:27205") {
+    throw new Error(`Failed to attach tmdb alias to Directus row:\n${JSON.stringify(tmdbAliasAdd, null, 2)}`);
+  }
+
+  const tmdbAliasList = await runSkeemJson([
+    "alias",
+    "list",
+    `companies:${tmdbBridgeCompanyId}`,
+  ]);
+  if (
+    !tmdbAliasList.ok ||
+    !Array.isArray(tmdbAliasList.data) ||
+    !tmdbAliasList.data.some((row) => row.alias === "tmdb:movie:27205")
+  ) {
+    throw new Error(`Alias list should include the tmdb cross-provider id:\n${JSON.stringify(tmdbAliasList, null, 2)}`);
+  }
+
+  const tmdbAliasSearch = await runSkeemJson([
+    "alias",
+    "search",
+    "companies",
+    "tmdb:movie:27205",
+  ]);
+  if (
+    !tmdbAliasSearch.ok ||
+    !Array.isArray(tmdbAliasSearch.data) ||
+    !tmdbAliasSearch.data.some((row) => Number(row.record_id) === Number(tmdbBridgeCompanyId))
+  ) {
+    throw new Error(`Alias search should resolve tmdb id back to the Directus row:\n${JSON.stringify(tmdbAliasSearch, null, 2)}`);
+  }
+
+  if (process.env.TMDB_API_KEY) {
+    const tmdbLiveGet = await runSkeemJson(["source", "get", "movies", "27205"], {
+      cwd: sourceWorkspaceDir,
+      skipConnectionFlags: true,
+      env: { SKEEM_SMOKE_TOKEN: adminToken, TMDB_API_KEY: process.env.TMDB_API_KEY },
+    });
+    if (!tmdbLiveGet.ok || tmdbLiveGet.data?.record?.id !== 27205) {
+      throw new Error(`Live TMDB get failed:\n${JSON.stringify(tmdbLiveGet, null, 2)}`);
+    }
+    const tmdbLiveFind = await runSkeemJson([
+      "source",
+      "find",
+      "movies",
+      "--where",
+      "query=Inception",
+      "--limit",
+      "3",
+    ], {
+      cwd: sourceWorkspaceDir,
+      skipConnectionFlags: true,
+      env: { SKEEM_SMOKE_TOKEN: adminToken, TMDB_API_KEY: process.env.TMDB_API_KEY },
+    });
+    if (!tmdbLiveFind.ok || !Array.isArray(tmdbLiveFind.data?.records) || tmdbLiveFind.data.records.length === 0) {
+      throw new Error(`Live TMDB find failed:\n${JSON.stringify(tmdbLiveFind, null, 2)}`);
+    }
+  }
+
+  const openLibraryDiscoverEnvelope = await runSkeemJson(["source", "discover", "books"], {
+    cwd: sourceWorkspaceDir,
+    skipConnectionFlags: true,
+    env: {
+      SKEEM_SMOKE_TOKEN: adminToken,
+      TMDB_API_KEY: process.env.TMDB_API_KEY ?? "smoke-fixture-key",
+    },
+  });
+  const olWorks = openLibraryDiscoverEnvelope.data?.schema?.collections?.find?.((c) => c.name === "works");
+  const olEditions = openLibraryDiscoverEnvelope.data?.schema?.collections?.find?.((c) => c.name === "editions");
+  if (
+    !openLibraryDiscoverEnvelope.ok ||
+    openLibraryDiscoverEnvelope.operation !== "source_discover" ||
+    openLibraryDiscoverEnvelope.data?.source !== "books" ||
+    openLibraryDiscoverEnvelope.data?.type !== "openlibrary" ||
+    !olWorks ||
+    olWorks.searchable !== true ||
+    !olWorks.fields.some((field) => field.name === "first_publish_year") ||
+    !olEditions ||
+    !olEditions.fields.some((field) => field.name === "isbn_13")
+  ) {
+    throw new Error(`Source discover did not return the curated openlibrary schema:\n${JSON.stringify(openLibraryDiscoverEnvelope, null, 2)}`);
+  }
+
+  const openLibraryBridgeCompany = await runSkeemJson(["create", "companies", "--name", "Penguin Books"]);
+  if (!openLibraryBridgeCompany.ok || openLibraryBridgeCompany.data?.name !== "Penguin Books") {
+    throw new Error(`Failed to create OpenLibrary-bridge fixture company:\n${JSON.stringify(openLibraryBridgeCompany, null, 2)}`);
+  }
+  const openLibraryBridgeCompanyId = openLibraryBridgeCompany.data?.id;
+
+  const openLibraryAliasAdd = await runSkeemJson([
+    "alias",
+    "add",
+    `companies:${openLibraryBridgeCompanyId}`,
+    "openlibrary:work:OL45804W",
+  ]);
+  if (!openLibraryAliasAdd.ok || openLibraryAliasAdd.data?.alias !== "openlibrary:work:OL45804W") {
+    throw new Error(`Failed to attach openlibrary alias to Directus row:\n${JSON.stringify(openLibraryAliasAdd, null, 2)}`);
+  }
+
+  const openLibraryAliasList = await runSkeemJson([
+    "alias",
+    "list",
+    `companies:${openLibraryBridgeCompanyId}`,
+  ]);
+  if (
+    !openLibraryAliasList.ok ||
+    !Array.isArray(openLibraryAliasList.data) ||
+    !openLibraryAliasList.data.some((row) => row.alias === "openlibrary:work:OL45804W")
+  ) {
+    throw new Error(`Alias list should include the openlibrary cross-provider id:\n${JSON.stringify(openLibraryAliasList, null, 2)}`);
+  }
+
+  const openLibraryAliasSearch = await runSkeemJson([
+    "alias",
+    "search",
+    "companies",
+    "openlibrary:work:OL45804W",
+  ]);
+  if (
+    !openLibraryAliasSearch.ok ||
+    !Array.isArray(openLibraryAliasSearch.data) ||
+    !openLibraryAliasSearch.data.some((row) => Number(row.record_id) === Number(openLibraryBridgeCompanyId))
+  ) {
+    throw new Error(`Alias search should resolve openlibrary id back to the Directus row:\n${JSON.stringify(openLibraryAliasSearch, null, 2)}`);
+  }
+
+  if (process.env.OPENLIBRARY_LIVE === "1") {
+    const olLiveGet = await runSkeemJson(["source", "get", "books", "works", "OL45804W"], {
+      cwd: sourceWorkspaceDir,
+      skipConnectionFlags: true,
+      env: { SKEEM_SMOKE_TOKEN: adminToken },
+    });
+    if (!olLiveGet.ok || olLiveGet.data?.record?.id !== "OL45804W") {
+      throw new Error(`Live OpenLibrary get failed:\n${JSON.stringify(olLiveGet, null, 2)}`);
+    }
+    const olLiveFind = await runSkeemJson([
+      "source",
+      "find",
+      "books",
+      "works",
+      "--where",
+      "query=Fantastic Mr Fox",
+      "--limit",
+      "3",
+    ], {
+      cwd: sourceWorkspaceDir,
+      skipConnectionFlags: true,
+      env: { SKEEM_SMOKE_TOKEN: adminToken },
+    });
+    if (!olLiveFind.ok || !Array.isArray(olLiveFind.data?.records) || olLiveFind.data.records.length === 0) {
+      throw new Error(`Live OpenLibrary find failed:\n${JSON.stringify(olLiveFind, null, 2)}`);
+    }
+  }
+
+  const wikidataDiscoverEnvelope = await runSkeemJson(["source", "discover", "entities"], {
+    cwd: sourceWorkspaceDir,
+    skipConnectionFlags: true,
+    env: {
+      SKEEM_SMOKE_TOKEN: adminToken,
+      TMDB_API_KEY: process.env.TMDB_API_KEY ?? "smoke-fixture-key",
+    },
+  });
+  const wdEntities = wikidataDiscoverEnvelope.data?.schema?.collections?.find?.((c) => c.name === "entities");
+  const wdProperties = wikidataDiscoverEnvelope.data?.schema?.external_id_properties;
+  if (
+    !wikidataDiscoverEnvelope.ok ||
+    wikidataDiscoverEnvelope.operation !== "source_discover" ||
+    wikidataDiscoverEnvelope.data?.source !== "entities" ||
+    wikidataDiscoverEnvelope.data?.type !== "wikidata" ||
+    !wdEntities ||
+    wdEntities.searchable !== true ||
+    !wdEntities.fields.some((field) => field.name === "external_ids") ||
+    !Array.isArray(wdProperties) ||
+    !wdProperties.some((entry) => entry.key === "tmdb_movie_id" && entry.property === "P4947") ||
+    !wdProperties.some((entry) => entry.key === "openlibrary_work_id" && entry.property === "P648")
+  ) {
+    throw new Error(`Source discover did not return the curated wikidata schema:\n${JSON.stringify(wikidataDiscoverEnvelope, null, 2)}`);
+  }
+
+  const crossProviderCompany = await runSkeemJson(["create", "companies", "--name", "Hitchhiker's Guide"]);
+  if (!crossProviderCompany.ok || crossProviderCompany.data?.name !== "Hitchhiker's Guide") {
+    throw new Error(`Failed to create cross-provider fixture company:\n${JSON.stringify(crossProviderCompany, null, 2)}`);
+  }
+  const crossProviderCompanyId = crossProviderCompany.data?.id;
+
+  const crossProviderAliases = [
+    "wikidata:entity:Q42",
+    "tmdb:person:1212",
+    "openlibrary:author:OL272947A",
+    "imdb:nm0010930",
+  ];
+  for (const alias of crossProviderAliases) {
+    const aliasAdd = await runSkeemJson([
+      "alias",
+      "add",
+      `companies:${crossProviderCompanyId}`,
+      alias,
+    ]);
+    if (!aliasAdd.ok || aliasAdd.data?.alias !== alias) {
+      throw new Error(`Failed to attach cross-provider alias "${alias}":\n${JSON.stringify(aliasAdd, null, 2)}`);
+    }
+  }
+
+  const crossProviderAliasList = await runSkeemJson([
+    "alias",
+    "list",
+    `companies:${crossProviderCompanyId}`,
+  ]);
+  if (
+    !crossProviderAliasList.ok ||
+    !Array.isArray(crossProviderAliasList.data) ||
+    !crossProviderAliases.every((alias) => crossProviderAliasList.data.some((row) => row.alias === alias))
+  ) {
+    throw new Error(`Alias list should include every cross-provider id:\n${JSON.stringify(crossProviderAliasList, null, 2)}`);
+  }
+
+  const wikidataAliasSearch = await runSkeemJson([
+    "alias",
+    "search",
+    "companies",
+    "wikidata:entity:Q42",
+  ]);
+  if (
+    !wikidataAliasSearch.ok ||
+    !Array.isArray(wikidataAliasSearch.data) ||
+    !wikidataAliasSearch.data.some((row) => Number(row.record_id) === Number(crossProviderCompanyId))
+  ) {
+    throw new Error(`Alias search should resolve a Q-ID back to the same Directus row:\n${JSON.stringify(wikidataAliasSearch, null, 2)}`);
+  }
+
+  // Same row, addressed by a different namespace — proves the federated identity story
+  const tmdbCrossSearch = await runSkeemJson([
+    "alias",
+    "search",
+    "companies",
+    "tmdb:person:1212",
+  ]);
+  if (
+    !tmdbCrossSearch.ok ||
+    !tmdbCrossSearch.data.some((row) => Number(row.record_id) === Number(crossProviderCompanyId))
+  ) {
+    throw new Error(`Cross-provider alias search via tmdb id failed:\n${JSON.stringify(tmdbCrossSearch, null, 2)}`);
+  }
+
+  if (process.env.WIKIDATA_LIVE === "1") {
+    const wdLiveGet = await runSkeemJson(["source", "get", "entities", "entities", "Q42"], {
+      cwd: sourceWorkspaceDir,
+      skipConnectionFlags: true,
+      env: { SKEEM_SMOKE_TOKEN: adminToken },
+    });
+    if (!wdLiveGet.ok || wdLiveGet.data?.record?.id !== "Q42") {
+      throw new Error(`Live Wikidata get failed:\n${JSON.stringify(wdLiveGet, null, 2)}`);
+    }
+    if (!wdLiveGet.data?.record?.external_ids || typeof wdLiveGet.data.record.external_ids !== "object") {
+      throw new Error(`Live Wikidata get did not project external_ids:\n${JSON.stringify(wdLiveGet, null, 2)}`);
+    }
+    const wdLiveFind = await runSkeemJson([
+      "source",
+      "find",
+      "entities",
+      "entities",
+      "--where",
+      "query=Douglas Adams",
+      "--limit",
+      "3",
+    ], {
+      cwd: sourceWorkspaceDir,
+      skipConnectionFlags: true,
+      env: { SKEEM_SMOKE_TOKEN: adminToken },
+    });
+    if (!wdLiveFind.ok || !Array.isArray(wdLiveFind.data?.records) || wdLiveFind.data.records.length === 0) {
+      throw new Error(`Live Wikidata find failed:\n${JSON.stringify(wdLiveFind, null, 2)}`);
+    }
   }
 
   const claimedCompany = await runSkeemJson(["create", "companies", "--name", "Claimed Co"]);
@@ -2026,6 +2459,50 @@ async function clearSkeemCache() {
 
 async function clearCacheAt(rootDir) {
   await rm(path.join(rootDir, ".skeem"), { recursive: true, force: true });
+}
+
+async function prepareExtensionWorkspace() {
+  await mkdir(extensionFixtureManifestDir, { recursive: true });
+  await writeFile(
+    extensionWorkspaceConfigPath,
+    [
+      "adapter: directus",
+      "connection:",
+      `  url: \"${baseUrl}\"`,
+      "  token: \"${SKEEM_SMOKE_TOKEN}\"",
+    ].join("\n"),
+  );
+  await writeFile(
+    extensionFixtureManifestPath,
+    [
+      "name: fixture",
+      "version: 0.1.0",
+      "description: Smoke test fixture extension",
+      "depends_on: []",
+      "cli_commands: []",
+    ].join("\n"),
+  );
+}
+
+async function prepareSourceWorkspace() {
+  await mkdir(sourceWorkspaceDir, { recursive: true });
+  await writeFile(
+    sourceWorkspaceConfigPath,
+    [
+      "adapter: directus",
+      "connection:",
+      `  url: \"${baseUrl}\"`,
+      "  token: \"${SKEEM_SMOKE_TOKEN}\"",
+      "sources:",
+      "  movies:",
+      "    type: tmdb",
+      "    api_key: \"${TMDB_API_KEY}\"",
+      "  books:",
+      "    type: openlibrary",
+      "  entities:",
+      "    type: wikidata",
+    ].join("\n"),
+  );
 }
 
 async function prepareConfigWorkspace() {

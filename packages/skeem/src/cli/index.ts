@@ -264,6 +264,75 @@ export async function runCli(argv: string[]): Promise<void> {
             throw new UsageError("Usage: skeem alias <add|list|remove|search> ...");
         }
       }
+      case "source": {
+        const [subcommand, ...sourceArgs] = rest;
+        switch (subcommand) {
+          case "list":
+            writeEnvelope(await runtime.sourceList(cli), { json });
+            return;
+          case "discover": {
+            const [sourceName] = sourceArgs;
+            if (!sourceName) {
+              throw new UsageError("Usage: skeem source discover <name>");
+            }
+            writeEnvelope(await runtime.sourceDiscover(sourceName, cli), { json });
+            return;
+          }
+          case "get": {
+            const [sourceName, collection, id] = sourceArgs;
+            if (!sourceName || !collection || id === undefined) {
+              throw new UsageError("Usage: skeem source get <name> <collection> <id>");
+            }
+            writeEnvelope(
+              await runtime.sourceGet(sourceName, collection, parsePrimaryKey(id), cli),
+              { json },
+            );
+            return;
+          }
+          case "find": {
+            const [sourceName, collection] = sourceArgs;
+            if (!sourceName || !collection) {
+              throw new UsageError(
+                "Usage: skeem source find <name> <collection> [--where field=value]",
+              );
+            }
+            writeEnvelope(
+              await runtime.sourceFind(
+                sourceName,
+                collection,
+                parseWhere(parsed.flags.get("where") ?? []),
+                {
+                  ...(parseOptionalInt(parsed.flags.get("limit")?.at(-1)) !== undefined
+                    ? { limit: parseOptionalInt(parsed.flags.get("limit")?.at(-1)) }
+                    : {}),
+                  ...(parseOptionalInt(parsed.flags.get("offset")?.at(-1)) !== undefined
+                    ? { offset: parseOptionalInt(parsed.flags.get("offset")?.at(-1)) }
+                    : {}),
+                  ...(parsed.flags.get("sort")?.at(-1) ? { sort: parsed.flags.get("sort")?.at(-1) } : {}),
+                },
+                cli,
+              ),
+              { json },
+            );
+            return;
+          }
+          default:
+            throw new UsageError("Usage: skeem source <list|discover|get|find> ...");
+        }
+      }
+      case "extend": {
+        const [subcommand] = rest;
+        switch (subcommand) {
+          case "list":
+            writeEnvelope(await runtime.extendList(cli), { json });
+            return;
+          case "status":
+            writeEnvelope(await runtime.extendStatus(cli), { json });
+            return;
+          default:
+            throw new UsageError("Usage: skeem extend <list|status>");
+        }
+      }
       case "exec": {
         writeEnvelope(await runtime.exec(await readExecPlanFromStdin(), cli), { json });
         return;
@@ -463,6 +532,12 @@ function helpText(): string {
     "  skeem alias list <collection:id>",
     "  skeem alias remove <collection:id> <alias>",
     "  skeem alias search <collection> <term>",
+    "  skeem extend list",
+    "  skeem extend status",
+    "  skeem source list",
+    "  skeem source discover <name>",
+    "  skeem source get <name> <collection> <id>",
+    "  skeem source find <name> <collection> [--where field=value] [--limit N] [--offset N]",
     "  skeem exec < plan.json",
     "  skeem cache <show|clear>",
   ].join("\n");

@@ -48,6 +48,20 @@ import {
   buildSystemCollectionStatus,
   getSystemCollectionDefinition,
 } from "../system/tables.js";
+import {
+  discoverExtensionManifests,
+  resolveExtensionsRoot,
+} from "../extensions/manifest.js";
+import {
+  EXTENSIONS_COLLECTION,
+  buildExtensionStatus,
+  summarizeExtensionStatus,
+} from "../extensions/registry.js";
+import {
+  instantiateSource,
+  listSupportedSourceTypes,
+  summarizeConfiguredSources,
+} from "../sources/registry.js";
 import { toSuccessEnvelope } from "../output/formatter.js";
 import type {
   CliGlobalOptions,
@@ -1417,6 +1431,129 @@ export class SkeemRuntime {
     });
   }
 
+  async sourceList(_cli: CliGlobalOptions): Promise<SuccessEnvelope> {
+    const configured = summarizeConfiguredSources(this.config.sources);
+    return toSuccessEnvelope({
+      operation: "source_list",
+      data: {
+        configured,
+        supported_types: listSupportedSourceTypes(),
+      },
+      count: configured.length,
+    });
+  }
+
+  async sourceDiscover(name: string, _cli: CliGlobalOptions): Promise<SuccessEnvelope> {
+    const source = await instantiateSource(name, this.config.sources);
+    return toSuccessEnvelope({
+      operation: "source_discover",
+      data: {
+        source: name,
+        type: this.config.sources[name]?.type,
+        schema: source.describe(),
+      },
+    });
+  }
+
+  async sourceGet(
+    name: string,
+    collection: string,
+    id: PrimaryKey,
+    _cli: CliGlobalOptions,
+  ): Promise<SuccessEnvelope> {
+    const source = await instantiateSource(name, this.config.sources);
+    const record = await source.get(collection, id);
+    return toSuccessEnvelope({
+      operation: "source_get",
+      collection,
+      data: {
+        source: name,
+        record,
+      },
+    });
+  }
+
+  async sourceFind(
+    name: string,
+    collection: string,
+    filter: Filter,
+    options: { limit?: number; offset?: number; sort?: string },
+    _cli: CliGlobalOptions,
+  ): Promise<SuccessEnvelope> {
+    const source = await instantiateSource(name, this.config.sources);
+    const records = await source.find(collection, filter, {
+      ...(options.limit !== undefined ? { limit: options.limit } : {}),
+      ...(options.offset !== undefined ? { offset: options.offset } : {}),
+      ...(options.sort ? { sort: options.sort } : {}),
+    });
+    return toSuccessEnvelope({
+      operation: "source_find",
+      collection,
+      data: {
+        source: name,
+        records,
+      },
+      count: records.length,
+    });
+  }
+
+  async extendList(_cli: CliGlobalOptions): Promise<SuccessEnvelope> {
+    const root = resolveExtensionsRoot(this.config.rootDir, this.extensionsConfigPath());
+    const manifests = await discoverExtensionManifests(root);
+    const data = manifests.map((entry) => ({
+      name: entry.manifest.name,
+      version: entry.manifest.version,
+      ...(entry.manifest.description ? { description: entry.manifest.description } : {}),
+      ...(entry.manifest.requires ? { requires: entry.manifest.requires } : {}),
+      depends_on: [...entry.manifest.dependsOn],
+      cli_commands: [...entry.manifest.cliCommands],
+      manifest_path: entry.manifestPath,
+      root_dir: entry.rootDir,
+    }));
+
+    return toSuccessEnvelope({
+      operation: "extend_list",
+      data,
+      count: data.length,
+    });
+  }
+
+  async extendStatus(_cli: CliGlobalOptions): Promise<SuccessEnvelope> {
+    const root = resolveExtensionsRoot(this.config.rootDir, this.extensionsConfigPath());
+    const manifests = await discoverExtensionManifests(root);
+    const schema = await this.loadLiveSchema();
+    const registryExists = schema.collections.has(EXTENSIONS_COLLECTION);
+    const installedRows = registryExists ? await this.findExtensionRows() : [];
+    const entries = buildExtensionStatus({
+      manifests,
+      installedRows: installedRows.map((row) => ({
+        ...(row.id !== undefined && (typeof row.id === "string" || typeof row.id === "number")
+          ? { id: row.id }
+          : {}),
+        name: typeof row.name === "string" ? row.name : "",
+        ...(typeof row.version === "string" ? { version: row.version } : {}),
+        ...(typeof row.description === "string" ? { description: row.description } : {}),
+        ...(typeof row.schema_hash === "string" ? { schema_hash: row.schema_hash } : {}),
+        ...(typeof row.installed_by === "string" ? { installed_by: row.installed_by } : {}),
+        ...(typeof row.installed_at === "string" ? { installed_at: row.installed_at } : {}),
+      })),
+    });
+
+    return toSuccessEnvelope({
+      operation: "extend_status",
+      data: {
+        registry: {
+          collection: EXTENSIONS_COLLECTION,
+          provisioned: registryExists,
+        },
+        extensions_root: root,
+        summary: summarizeExtensionStatus(entries),
+        entries,
+      },
+      count: entries.length,
+    });
+  }
+
   async exec(planInput: ExecPlanInput, cli: CliGlobalOptions): Promise<SuccessEnvelope> {
     if (cli.idempotencyKey) {
       throw new UsageError("Idempotency replay is not supported for skeem exec yet.");
@@ -2105,6 +2242,30 @@ export class SkeemRuntime {
       }
       throw error;
     }
+  }
+
+  private async findExtensionRows(
+    options?: { limit?: number; sort?: string },
+  ): Promise<EntityRecord[]> {
+    try {
+      return await this.adapter.find(EXTENSIONS_COLLECTION, {}, {
+        ...(options?.limit !== undefined ? { limit: options.limit } : {}),
+        ...(options?.sort ? { sort: options.sort } : {}),
+      });
+    } catch (error) {
+      if (
+        isDirectusRequestError(error) &&
+        (error.status === 404 || (error.status === 403 && /does not exist/i.test(error.message)))
+      ) {
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  private extensionsConfigPath(): string | undefined {
+    const raw = this.config.extensions["path"];
+    return typeof raw === "string" && raw.trim().length > 0 ? raw : undefined;
   }
 
   private async findProvenanceRows(

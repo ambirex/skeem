@@ -29,7 +29,10 @@ The goal of the original next slices was to close the biggest Phase 1 gaps befor
 - Completed: Slice 15: Claims and Coordination Foundation
 - Completed: Slice 16: Annotations Foundation
 - Completed: Slice 17: Idempotency Foundation
-- Next logical step: Slice 18: Extension Registry Foundation
+- Completed: Slice 18: Extension Registry Foundation
+- Completed: Slice 19: Read Source Foundation
+- Completed: Slice 20: Second Read Source (Open Library)
+- Completed: Slice 21: Wikidata Cross-Provider Identity Hub
 
 ## Slice 1: Discovery Completeness
 
@@ -945,7 +948,7 @@ The runtime now has most of the write primitives in place, plus provenance rows 
 
 ## Slice 18: Extension Registry Foundation
 
-Status: next
+Status: completed
 
 ### Why now
 
@@ -979,6 +982,223 @@ The core runtime is now covering the main system-table and data-operation founda
 
 - The repo has a real extension registry foundation that future install/apply work can build on without redesigning the CLI or system table
 
+### Completion Notes
+
+- Added `skeem_extensions` to the supported system-table set and `skeem init` provisioning flow
+- Added manifest primitives in a new `extensions/` module:
+- `parseExtensionManifest` for YAML-driven manifest parsing with explicit field validation
+- `loadExtensionManifest` for file-backed reads
+- `discoverExtensionManifests` for scanning a configurable extensions root
+- Defaulted the extensions root to `<rootDir>/extensions` and made it overridable via the `extensions.path` config entry
+- Added a registry helper that joins discovered manifests with rows from `skeem_extensions` and classifies each entry as `available`, `installed`, `version_drift`, or `installed_without_manifest`
+- Added `skeem extend list` for read-only manifest discovery output
+- Added `skeem extend status` backed by `skeem_extensions`, which gracefully reports the registry as not provisioned without erroring
+- Added unit coverage for:
+- manifest parsing happy paths and rejection of missing or malformed fields
+- discovery scanning, sort order, and missing-root behavior
+- registry status classification across available, installed, drifted, and orphan rows
+- system-table fields and status shaping for the new `skeem_extensions` definition
+- Extended the Directus smoke harness to validate:
+- `init` status and provisioning for `skeem_extensions`
+- `extend list` against a manifest fixture
+- `extend status` reporting the fixture as `available` before any rows exist
+- `extend status` flipping to `installed` after a row is created in `skeem_extensions`
+- cleanup of the inserted fixture row via `delete --hard`
+
+## Slice 19: Read Source Foundation
+
+Status: completed
+
+### Why now
+
+Every adapter slice in the original roadmap was deferred because the runtime was still hardening core Directus behavior. That work is now in place, and the next high-leverage adapter direction is not "another writable backend" but read-only public sources (TMDB, WikiData, Wikipedia) that agents already want to enrich Directus records with. Forcing those through `SkemAdapter` would weaken the contract because most write, schema, and lifecycle verbs are nonsensical for a public API. The smaller move is to introduce a narrower read-source abstraction and prove it against one concrete source before any cross-provider join work.
+
+### Scope
+
+- Introduce a minimal `ReadSource` interface separate from `SkemAdapter`:
+- `discover` (static or curated schema)
+- `get`
+- `find` or `search`
+- Keep mutation, schema-mutation, soft-delete, claims, and idempotency verbs explicitly unsupported on read sources
+- Pick TMDB as the proving source (stable schema, clean REST, well-known ids)
+- Surface read sources under a separately namespaced backend so existing Directus behavior is unaffected
+- Reuse existing alias/identity primitives (`skeem_aliases`) for cross-provider identity instead of inventing a new mapping store
+- Defer federated `find` across two backends in one call; the join story should be shaped by at least two real sources
+
+### Deliverables
+
+- `ReadSource` interface and shared validation that mutation verbs return a clear "not supported" envelope on read sources
+- TMDB read source covering at least:
+- `movies` lookup by id
+- a single search/find path
+- a static curated schema returned from `discover`
+- CLI plumbing to address a read source explicitly without colliding with the primary adapter
+- Unit coverage for:
+- read-source discovery output
+- get and find happy-path shaping
+- mutation-verb rejection envelopes
+- Smoke or integration coverage that:
+- discovers the TMDB source schema
+- fetches one record by id
+- runs one find/search call
+- verifies a Directus record can carry a `tmdb:movie:<id>` alias that resolves back to the same lookup
+
+### Exit criteria
+
+- A user can read from one external source through `skeem` with the same envelopes and CLI shape they already use for Directus reads, while the foundation makes future sources (WikiData, Wikipedia) and a real cross-provider join layer straightforward to add
+
+### Completion Notes (Slice 19)
+
+- Introduced a separate `ReadSource` interface in core (`packages/skeem/src/sources/types.ts`) that is intentionally narrower than `SkemAdapter`:
+- only `connect`, `describe`, `get`, and `find`
+- mutation, schema-mutation, soft-delete, claims, and idempotency verbs are simply not part of the contract, so they do not need explicit "not supported" rejections at the source layer
+- Added a `sources:` config section with per-source connection configs (defaults `type` to the entry key when omitted) and full env interpolation through the existing `${VAR}` mechanism
+- Created `@skeems/tmdb` as a separate package mirroring the Directus split:
+- `createTmdbSource()` factory returning the read-source contract
+- v3 `api_key` and v4 `read_token` (Bearer) auth, with curated `movies` schema and projected fields
+- `get` for `/movie/{id}` and `find` for `/search/movie`, including paginated traversal across TMDB pages and offset translation
+- Added a source registry (`packages/skeem/src/sources/registry.ts`) that knows the supported types, summarizes configured sources, and instantiates them lazily
+- Added runtime methods `sourceList`, `sourceDiscover`, `sourceGet`, `sourceFind` and a top-level `skeem source <list|discover|get|find>` CLI subcommand with stable JSON envelopes
+- Reused `skeem_aliases` for cross-provider identity instead of inventing a new mapping store: a Directus row can now carry a `tmdb:movie:<id>` alias and be resolved back through the existing alias system
+- Added unit coverage for:
+- TMDB source happy paths (get, find, pagination, offset translation, bearer auth) and error envelopes via mocked fetch
+- registry classification, configured-source summarization, and instantiation guards
+- config loader normalization, env interpolation, and default `type` inference for sources
+- Extended the Directus smoke harness to validate:
+- `skeem source list` surfaces the configured tmdb source and supported types
+- `skeem source discover movies` returns the curated tmdb schema (no live API call)
+- discovering an unconfigured source fails with a clear "not configured" error
+- a Directus `companies` row can carry a `tmdb:movie:27205` alias that resolves back through `alias list` and `alias search`
+- live `source get` and `source find` against TMDB are exercised only when `TMDB_API_KEY` is set in the environment
+
+## Slice 20: Second Read Source (Open Library)
+
+Status: completed
+
+### Why now
+
+Slice 19 proved the `ReadSource` contract against a single source (TMDB), but a contract is only as good as the second implementation that has to fit it. Open Library is the cleanest second source: free, no API key, stable string-based OLIDs (different shape from TMDB's integer IDs), and a natural cross-provider identity story via `openlibrary:work:<OLID>` aliases. This is the smallest move that stress-tests the abstraction.
+
+### Scope
+
+- Add `@skeems/openlibrary` as a separate package mirroring `@skeems/tmdb`
+- Expose two collections (`works` and `editions`) keyed by OLID
+- Cover get for both collections and search-style find for works
+- Reuse the existing `skeem source` CLI verb and `skeem_aliases` for cross-provider identity
+- Defer authors, ISBN-driven edition find, and federated cross-source query to future slices
+
+### Deliverables
+
+- New `@skeems/openlibrary` package with `createOpenLibrarySource()`:
+- auth-free connect with configurable `base_url` and `user_agent`
+- curated schema for `works` and `editions` (OLID-string primary keys)
+- get on both collections with explicit projection
+- search-driven find on works with paginated walking
+- explicit rejection envelope for find on editions and unknown collections
+- Registered in the core source registry under type `openlibrary`
+- Smoke coverage for:
+- `skeem source list` surfacing both `movies` (tmdb) and `books` (openlibrary)
+- `skeem source discover books` returning the curated works/editions schema
+- attaching `openlibrary:work:OL45804W` to a Directus record and resolving it back through `alias list` and `alias search`
+- live `source get` and `source find` against Open Library gated behind `OPENLIBRARY_LIVE=1`
+
+### Exit criteria
+
+- A second source ships against the existing `ReadSource` contract without contract churn, and the alias bridge demonstrably handles two independent identifier shapes (integer-keyed TMDB and OLID-string Open Library)
+
+### Completion Notes (Slice 20)
+
+- Added `packages/skeem-openlibrary/` package mirroring the `@skeems/tmdb` layout (package.json, tsconfigs, src split into types/source/index)
+- `createOpenLibrarySource()` exposes the same structural shape as TMDB but with:
+- string-based OLID primary keys (e.g. `OL45804W`, `OL7353617M`)
+- two collections instead of one (`works` searchable, `editions` get-only)
+- explicit `find_unsupported_collection` envelope for `editions.find`
+- `User-Agent` header per Open Library guidance, defaulting to `skeem-openlibrary/0.1.0` and overridable via config
+- Registered the new factory in `packages/skeem/src/sources/registry.ts` under type `openlibrary`
+- Wired the new workspace into the root build script and `packages/skeem/package.json` dependency list
+- Added 12 unit tests in `packages/skeem-openlibrary/src/source.test.ts` covering:
+- describe schema shape
+- get on works (with `first_publish_date` → `first_publish_year` parsing)
+- get on editions (including `work_id` projection from linked works)
+- 404 envelope shaping
+- find requires query, sliced limit, paginated walk, offset translation
+- editions-find rejection
+- unknown-collection rejection
+- explicit `base_url` override
+- Updated `packages/skeem/src/sources/registry.test.ts` to assert both supported types and added a parallel "instantiate openlibrary" case; refactored a placeholder test to use a clearly-fake type (`imaginary-source`) instead of relying on `openlibrary` being unsupported
+- Extended the Directus smoke harness to:
+- include `books: openlibrary` alongside `movies: tmdb` in the source workspace `.skeemrc.yaml`
+- assert `source list` reports both sources as supported
+- assert `source discover books` returns the curated works/editions schema
+- attach `openlibrary:work:OL45804W` to a Directus row and verify alias-list/alias-search round-trip
+- run live OpenLibrary `source get`/`source find` only when `OPENLIBRARY_LIVE=1`
+- Recommended next step (Slice 21 candidate): a Wikidata source as the universal cross-provider join hub. Wikidata exposes typed external-ID properties for TMDB (P4947), OpenLibrary work (P648) and edition (P5331), MusicBrainz (P434/P435/P436), IMDB (P345), DOI (P356), ORCID (P496), GeoNames (P1566), OSM (P402), and many more — adding Wikidata converts today's per-source alias strings into a federated identity layer reachable through Q-IDs.
+
+## Slice 21: Wikidata Cross-Provider Identity Hub
+
+Status: completed
+
+### Why now
+
+Slice 20 proved the `ReadSource` contract holds against a second source with a different identifier shape (string OLIDs vs integer TMDB ids). The next high-leverage move is the universal hub: Wikidata's Q-IDs expose typed external-ID properties for nearly every source we care about, so adding Wikidata turns the alias system from "per-source strings on a record" into a federated identity layer where one record can be addressed by Q-ID, TMDB id, OpenLibrary OLID, IMDB id, or any other supported namespace simultaneously.
+
+### Scope
+
+- Add `@skeems/wikidata` as a third read-source package mirroring the TMDB/OpenLibrary pattern
+- Expose a single `entities` collection keyed by Q-ID
+- Use the EntityData JSON endpoint for `get` and the `wbsearchentities` Action API for `find` — no SPARQL, no auth, no key
+- Curate the entity projection aggressively: label/description/aliases (English by default, configurable), `instance_of` Q-IDs, a curated `external_ids` map for the high-leverage joiner properties, and a `wikipedia` map of site-keyed titles
+- Reuse the existing `skeem source` CLI verb and `skeem_aliases` for cross-provider identity
+- Defer SPARQL graph queries, multi-language label hydration, statement qualifiers/references, nested entity label resolution, bulk reverse-lookup (foreign id → Q-ID), and federated cross-source query
+
+### Deliverables
+
+- `@skeems/wikidata` package with `createWikidataSource()`:
+- auth-free connect with configurable `base_url`, `language`, and `user_agent`
+- static `entities` schema with an `external_id_properties` map exposing the curated property bridge for introspection
+- get with QID validation and English-fallback localization
+- search-driven find with `search-continue` cursor pagination and offset translation
+- explicit rejection envelope for malformed Q-IDs, missing entities, and unsupported collections
+- Registered in the core source registry under type `wikidata`
+- Smoke coverage for:
+- `skeem source list` surfacing all three sources (`tmdb`, `openlibrary`, `wikidata`)
+- `skeem source discover entities` returning the curated wikidata schema and the `external_id_properties` map
+- a single Directus row simultaneously carrying `wikidata:entity:Q42`, `tmdb:person:1212`, `openlibrary:author:OL272947A`, and `imdb:nm0010930` aliases — proving the federated identity story
+- alias search resolving the same Directus row from any of those namespaces
+- live `source get` and `source find` against Wikidata gated behind `WIKIDATA_LIVE=1`
+
+### Exit criteria
+
+- A Directus row can be addressed by Q-ID and reach back into TMDB, OpenLibrary, IMDB (and every other curated property) through `skeem_aliases` without a federated query layer being introduced
+
+### Completion Notes
+
+- Added `packages/skeem-wikidata/` package mirroring the existing read-source pattern
+- `createWikidataSource()` uses the EntityData JSON endpoint for `get` and `wbsearchentities` for `find` — both unauthenticated and key-free
+- The curated external-ID property map exposes 22 high-leverage joiner properties (TMDB movie/TV/person, IMDB, OpenLibrary work/edition, ISBN-10/13, MusicBrainz artist/work/release-group/recording, DOI, ORCID, PubMed, arXiv, VIAF, Library of Congress, GeoNames, OSM relation, Freebase legacy, SEC CIK)
+- `describe()` returns the `external_id_properties` list alongside the schema so introspection tools can see exactly which Wikidata properties are projected — this is the bridge map for any future federated find work
+- Q-ID format is validated up front (`/^Q\d+$/`); property IDs and other entity types are intentionally rejected to keep the contract narrow
+- Localized label/description/aliases default to English with English fallback when the configured language is missing
+- `external_ids` extraction respects rank — deprecated statements are skipped, the first non-deprecated mainsnak value wins (sufficient for 1:1 external IDs; multi-value handling deferred)
+- Wikipedia sitelinks are surfaced as a `{ <site>: { title, url } }` map keyed by stripped site code (e.g. `en`, `de`)
+- Find separates per-request page size (`MAX_PAGE_SIZE=50`, the wbsearchentities cap) from overall limit cap (`OVERALL_LIMIT_CAP=200`) — this was a bug caught by the pagination test
+- Find pagination uses Wikidata's native `search-continue` cursor; offset translates directly into the initial cursor instead of being translated into pages
+- Added 13 unit tests in `packages/skeem-wikidata/src/source.test.ts` covering: describe schema and external_id_properties exposure, base URL validation, Q-ID format validation, full Q42-style get projection, language fallback, missing-entity envelope, 404 handling, find requires query, sliced limit, search-continue pagination, offset cursor translation, unsupported collections, base_url override
+- Updated `packages/skeem/src/sources/registry.ts` to register the new factory and `registry.test.ts` to assert all three supported types
+- Wired the workspace into the root build script and `packages/skeem/package.json` dependency list
+- Extended the Directus smoke harness to:
+- include `entities: wikidata` alongside `movies: tmdb` and `books: openlibrary` in the source workspace `.skeemrc.yaml`
+- assert `source list` reports all three sources as supported
+- assert `source discover entities` returns the curated schema and external-ID property bridge
+- create one Directus row that carries `wikidata:entity:Q42`, `tmdb:person:1212`, `openlibrary:author:OL272947A`, and `imdb:nm0010930` aliases simultaneously
+- verify the same row is reachable by alias search from at least two different source namespaces (Q-ID and TMDB id)
+- run live Wikidata `source get`/`source find` only when `WIKIDATA_LIVE=1`
+- Open follow-ups (none needed for foundation, but worth flagging):
+- multi-value external-ID handling (e.g., entities with multiple ISBN-13s)
+- nested entity-label hydration (`instance_of` returns Q-IDs but not labels — would need a second fetch)
+- bulk reverse-lookup ("find Q-ID for `tmdb:movie:603`") via SPARQL
+- promoting curated external-id property keys to first-class skeem alias namespaces so `tmdb:movie:603` matches Q-IDs that have P4947=603 without any per-record alias add
+
 ## Recommended Order
 
 1. Slice 1: Discovery Completeness
@@ -999,11 +1219,17 @@ The core runtime is now covering the main system-table and data-operation founda
 16. Slice 16: Annotations Foundation
 17. Slice 17: Idempotency Foundation
 18. Slice 18: Extension Registry Foundation
+19. Slice 19: Read Source Foundation
+20. Slice 20: Second Read Source (Open Library)
+21. Slice 21: Wikidata Cross-Provider Identity Hub
 
 ## Not Next
 
 These are intentionally not part of the immediate next slice:
 
-- extension loading
+- extension loading and custom command registration
 - tool schema generation
-- additional adapters
+- additional writable adapters
+- federated cross-provider find/join (now plausible given three sources + a universal hub — but still wants its own design slice)
+- promoting curated Wikidata external-id property keys to first-class skeem alias namespaces (so `tmdb:movie:603` resolves through Q-IDs without per-record alias adds)
+- additional read sources — MusicBrainz is the strongest next candidate (UUID-keyed, dense music ecosystem cross-references)
