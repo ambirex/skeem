@@ -1,17 +1,48 @@
 {
   "name": "@skeem/directus",
   "version": "0.1.0",
+  "description": "Directus adapter for the skeem CLI.",
+  "license": "MIT",
+  "author": "Brent Doll <brent.doll@gmail.com>",
+  "homepage": "https://github.com/ambirex/skeem#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ambirex/skeem.git",
+    "directory": "packages/skeem-directus"
+  },
+  "bugs": {
+    "url": "https://github.com/ambirex/skeem/issues"
+  },
+  "keywords": [
+    "skeem",
+    "directus",
+    "adapter",
+    "headless",
+    "schema"
+  ],
   "type": "module",
-  "types": "./src/index.ts",
+  "engines": {
+    "node": ">=20"
+  },
+  "types": "./dist/src/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
     }
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run build"
   }
 }

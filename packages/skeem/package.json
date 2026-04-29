@@ -1,22 +1,55 @@
 {
   "name": "@skeem/cli",
   "version": "0.1.0",
+  "description": "Relational-aware CLI for headless backends, built for AI agents.",
+  "license": "MIT",
+  "author": "Brent Doll <brent.doll@gmail.com>",
+  "homepage": "https://github.com/ambirex/skeem#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ambirex/skeem.git",
+    "directory": "packages/skeem"
+  },
+  "bugs": {
+    "url": "https://github.com/ambirex/skeem/issues"
+  },
+  "keywords": [
+    "cli",
+    "directus",
+    "headless",
+    "schema",
+    "agents",
+    "ai",
+    "llm"
+  ],
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
     "skeem": "./dist/bin/skeem.js"
   },
-  "types": "./src/index.ts",
+  "types": "./dist/src/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
     }
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "dev": "node --enable-source-maps --import tsx ./bin/skeem.ts",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@skeem/directus": "0.1.0",

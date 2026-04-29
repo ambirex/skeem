@@ -15,10 +15,10 @@ Core `skeem` package containing the CLI entrypoint and backend-agnostic runtime.
 
 ## Useful Paths
 
-- [bin/skeem.ts](/Users/brent/dev/skeem/packages/skeem/bin/skeem.ts)
-- [src/cli/index.ts](/Users/brent/dev/skeem/packages/skeem/src/cli/index.ts)
-- [src/core/runtime.ts](/Users/brent/dev/skeem/packages/skeem/src/core/runtime.ts)
-- [src/config/load-config.ts](/Users/brent/dev/skeem/packages/skeem/src/config/load-config.ts)
+- [bin/skeem.ts](https://github.com/ambirex/skeem/blob/main/packages/skeem/bin/skeem.ts)
+- [src/cli/index.ts](https://github.com/ambirex/skeem/blob/main/packages/skeem/src/cli/index.ts)
+- [src/core/runtime.ts](https://github.com/ambirex/skeem/blob/main/packages/skeem/src/core/runtime.ts)
+- [src/config/load-config.ts](https://github.com/ambirex/skeem/blob/main/packages/skeem/src/config/load-config.ts)
 
 ## Common Commands
 
@@ -30,5 +30,5 @@ npm run typecheck --workspace @skeem/cli
 
 The root-level docs live at:
 
-- [README.md](/Users/brent/dev/skeem/README.md)
-- [docs/README.md](/Users/brent/dev/skeem/docs/README.md)
+- [README.md](https://github.com/ambirex/skeem/blob/main/README.md)
+- [docs/README.md](https://github.com/ambirex/skeem/blob/main/docs/README.md)
