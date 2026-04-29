@@ -25,9 +25,16 @@ The next roadmap item is extension registry groundwork. See [docs/next-slices.md
 - Coordination primitives: provenance, claims, annotations, versions, trash, and idempotency help keep multi-agent workflows sane.
 - Backend abstraction: core behavior lives in `packages/skeem`; the current adapter targets Directus.
 
-## Install From Source
+## Install
 
-Examples below use `skeem` as the command name. From this repo, either run the built binary directly or link the workspace package locally.
+```bash
+npm install -g @skeem/cli
+skeem ls --url http://127.0.0.1:8055 --token "$DIRECTUS_TOKEN"
+```
+
+`@skeem/cli` pulls in `@skeem/directus` automatically. Node 20+ is required.
+
+### From source
 
 ```bash
 npm install
