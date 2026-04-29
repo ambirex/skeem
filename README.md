@@ -15,7 +15,7 @@ Relational-aware CLI for headless backends, built for AI agents.
 - System features for aliases, provenance, versions, trash, claims, annotations, and idempotency
 - Stable JSON envelopes designed for agent callers
 
-The next roadmap item is extension registry groundwork. See [docs/next-slices.md](/Users/brent/dev/skeem/docs/next-slices.md).
+The next roadmap item is extension registry groundwork. See [docs/next-slices.md](docs/next-slices.md).
 
 ## Why Agents Use It
 
@@ -88,16 +88,16 @@ skeem init --json
 
 ## Docs
 
-- [Docs Index](/Users/brent/dev/skeem/docs/README.md)
-- [Getting Started](/Users/brent/dev/skeem/docs/guides/getting-started.md)
-- [Agent Workflows](/Users/brent/dev/skeem/docs/guides/agent-workflows.md)
-- [LLM Eval Plan](/Users/brent/dev/skeem/docs/guides/llm-evals.md)
-- [CLI Reference](/Users/brent/dev/skeem/docs/reference/cli.md)
-- [Configuration Reference](/Users/brent/dev/skeem/docs/reference/configuration.md)
-- [Schema Management](/Users/brent/dev/skeem/docs/reference/schema-management.md)
-- [System Features](/Users/brent/dev/skeem/docs/reference/system-features.md)
-- [Architecture Overview](/Users/brent/dev/skeem/docs/architecture/overview.md)
-- [Full Product Spec](/Users/brent/dev/skeem/docs/spec/full-spec.md)
+- [Docs Index](docs/README.md)
+- [Getting Started](docs/guides/getting-started.md)
+- [Agent Workflows](docs/guides/agent-workflows.md)
+- [LLM Eval Plan](docs/guides/llm-evals.md)
+- [CLI Reference](docs/reference/cli.md)
+- [Configuration Reference](docs/reference/configuration.md)
+- [Schema Management](docs/reference/schema-management.md)
+- [System Features](docs/reference/system-features.md)
+- [Architecture Overview](docs/architecture/overview.md)
+- [Full Product Spec](docs/spec/full-spec.md)
 
 ## Repo Layout
 
@@ -122,12 +122,12 @@ npm run smoke:directus
 
 Helpful entry points:
 
-- [packages/skeem/src/cli/index.ts](/Users/brent/dev/skeem/packages/skeem/src/cli/index.ts)
-- [packages/skeem/src/core/runtime.ts](/Users/brent/dev/skeem/packages/skeem/src/core/runtime.ts)
-- [packages/skeem-directus/src/adapter.ts](/Users/brent/dev/skeem/packages/skeem-directus/src/adapter.ts)
-- [test/smoke/directus-ls.mjs](/Users/brent/dev/skeem/test/smoke/directus-ls.mjs)
+- [packages/skeem/src/cli/index.ts](packages/skeem/src/cli/index.ts)
+- [packages/skeem/src/core/runtime.ts](packages/skeem/src/core/runtime.ts)
+- [packages/skeem-directus/src/adapter.ts](packages/skeem-directus/src/adapter.ts)
+- [test/smoke/directus-ls.mjs](test/smoke/directus-ls.mjs)
 
 ## Notes
 
-- The repo started from a single large spec. That original document is preserved at [docs/spec/full-spec.md](/Users/brent/dev/skeem/docs/spec/full-spec.md).
+- The repo started from a single large spec. That original document is preserved at [docs/spec/full-spec.md](docs/spec/full-spec.md).
 - The current codebase has moved well beyond the original Phase 1 scaffold, so prefer the current docs and tests when understanding what is implemented today.

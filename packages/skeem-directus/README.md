@@ -13,9 +13,9 @@ Most product behavior stays in the core package. This adapter aims to stay thin 
 
 ## Useful Paths
 
-- [src/adapter.ts](/Users/brent/dev/skeem/packages/skeem-directus/src/adapter.ts)
-- [src/client.ts](/Users/brent/dev/skeem/packages/skeem-directus/src/client.ts)
-- [src/index.ts](/Users/brent/dev/skeem/packages/skeem-directus/src/index.ts)
+- [src/adapter.ts](https://github.com/ambirex/skeem/blob/main/packages/skeem-directus/src/adapter.ts)
+- [src/client.ts](https://github.com/ambirex/skeem/blob/main/packages/skeem-directus/src/client.ts)
+- [src/index.ts](https://github.com/ambirex/skeem/blob/main/packages/skeem-directus/src/index.ts)
 
 ## Common Commands
 

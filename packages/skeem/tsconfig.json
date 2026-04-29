@@ -7,10 +7,5 @@
   "include": [
     "bin/**/*.ts",
     "src/**/*.ts"
-  ],
-  "references": [
-    {
-      "path": "../skeem-directus"
-    }
   ]
 }

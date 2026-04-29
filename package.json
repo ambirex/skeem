@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
+    "build": "npm run build -w @skeem/directus && npm run build -w @skeem/cli",
     "dev": "npm run dev --workspace @skeem/cli",
     "eval:run": "npm run build && node ./test/evals/run.mjs",
     "eval:nano-gpt:models": "node ./test/evals/providers/nano-gpt-models.mjs",
