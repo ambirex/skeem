@@ -14,6 +14,7 @@ describe("system tables", () => {
       "skeem_trash",
       "skeem_claims",
       "skeem_annotations",
+      "skeem_extensions",
     ]);
     expect(definitions[0]?.fields.map((field) => field.name)).toEqual([
       "collection",
@@ -69,6 +70,15 @@ describe("system tables", () => {
       "created_at",
       "expires_at",
     ]);
+    expect(definitions[6]?.fields.map((field) => field.name)).toEqual([
+      "name",
+      "version",
+      "description",
+      "schema_hash",
+      "installed_by",
+      "installed_at",
+    ]);
+    expect(definitions[6]?.fields.find((field) => field.name === "name")?.unique).toBe(true);
   });
 
   test("builds status from live schema presence", () => {
@@ -115,6 +125,11 @@ describe("system tables", () => {
         exists: false,
         supported: true,
       }),
+      expect.objectContaining({
+        collection: "skeem_extensions",
+        exists: false,
+        supported: true,
+      }),
     ]);
   });
 
@@ -125,6 +140,7 @@ describe("system tables", () => {
     expect(getSystemCollectionDefinition("skeem_trash")?.purpose).toContain("Soft-delete");
     expect(getSystemCollectionDefinition("skeem_claims")?.purpose).toContain("coordination");
     expect(getSystemCollectionDefinition("skeem_annotations")?.purpose).toContain("metadata");
+    expect(getSystemCollectionDefinition("skeem_extensions")?.purpose).toContain("extension");
     expect(getSystemCollectionDefinition("missing")).toBeUndefined();
   });
 });

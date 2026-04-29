@@ -125,6 +125,22 @@ const SYSTEM_COLLECTIONS: SystemCollectionDefinition[] = [
       "Expiry metadata is stored now; lifecycle cleanup and automatic filtering are deferred.",
     ],
   },
+  {
+    name: "skeem_extensions",
+    purpose: "Registry of installed extensions and their manifest metadata.",
+    fields: [
+      { name: "name", type: "string", required: true, unique: true },
+      { name: "version", type: "string", required: true },
+      { name: "description", type: "string" },
+      { name: "schema_hash", type: "string" },
+      { name: "installed_by", type: "string" },
+      { name: "installed_at", type: "datetime" },
+    ],
+    notes: [
+      "Slice 18 only reads this table; install/apply writes land with the extension loader work.",
+      "Uniqueness on `name` is declared but full installation flows are deferred until manifests can drive schema apply.",
+    ],
+  },
 ];
 
 export function listSupportedSystemCollections(): SystemCollectionDefinition[] {

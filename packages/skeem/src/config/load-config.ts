@@ -3,7 +3,12 @@ import { homedir } from "node:os";
 import path from "node:path";
 import YAML from "yaml";
 
-import type { CliGlobalOptions, ResolvedConfig } from "../types/index.js";
+import type { CliGlobalOptions, ReadSourceConnectionConfig, ResolvedConfig } from "../types/index.js";
+
+interface RawSourceConfig {
+  type?: string;
+  [key: string]: unknown;
+}
 
 interface RawConfig {
   adapter?: string;
@@ -18,6 +23,7 @@ interface RawConfig {
     exclude?: string[];
   };
   extensions?: Record<string, unknown>;
+  sources?: Record<string, RawSourceConfig>;
   profiles?: Record<string, Omit<RawConfig, "profiles" | "default">>;
   default?: string;
   cache?: {
@@ -70,6 +76,7 @@ export async function loadConfig(startDir: string, cli: CliGlobalOptions): Promi
       exclude: resolved.schema?.exclude ?? ["directus_*"],
     },
     extensions: resolved.extensions ?? {},
+    sources: normalizeSources(resolved.sources),
     cache: {
       ttlMs: resolved.cache?.ttl_ms ?? (resolved.cache?.ttl_seconds ? resolved.cache.ttl_seconds * 1000 : 60 * 60 * 1000),
     },
@@ -134,6 +141,7 @@ function mergeConfigs(base: RawConfig, override: RawConfig): RawConfig {
       ...(base.extensions ?? {}),
       ...(override.extensions ?? {}),
     },
+    sources: mergeSources(base.sources, override.sources),
     profiles: {
       ...(base.profiles ?? {}),
       ...(override.profiles ?? {}),
@@ -173,6 +181,42 @@ function applyCliOverrides(config: RawConfig, cli: CliGlobalOptions): RawConfig 
         }
       : {}),
   });
+}
+
+function mergeSources(
+  base?: Record<string, RawSourceConfig>,
+  override?: Record<string, RawSourceConfig>,
+): Record<string, RawSourceConfig> | undefined {
+  if (!base && !override) {
+    return undefined;
+  }
+  const merged: Record<string, RawSourceConfig> = {};
+  for (const [name, value] of Object.entries(base ?? {})) {
+    merged[name] = { ...value };
+  }
+  for (const [name, value] of Object.entries(override ?? {})) {
+    merged[name] = { ...(merged[name] ?? {}), ...value };
+  }
+  return merged;
+}
+
+function normalizeSources(
+  raw?: Record<string, RawSourceConfig>,
+): Record<string, ReadSourceConnectionConfig> {
+  if (!raw) {
+    return {};
+  }
+  const result: Record<string, ReadSourceConnectionConfig> = {};
+  for (const [name, value] of Object.entries(raw)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`Source "${name}" config must be a mapping.`);
+    }
+    const type = typeof value.type === "string" && value.type.trim().length > 0
+      ? value.type.trim()
+      : name;
+    result[name] = { ...value, type };
+  }
+  return result;
 }
 
 function interpolateEnv(value: unknown): unknown {

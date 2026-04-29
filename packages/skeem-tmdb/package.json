@@ -1,33 +1,27 @@
 {
-  "name": "skeem",
+  "name": "@skeems/tmdb",
   "version": "0.1.0",
-  "description": "Relational-aware CLI for headless backends, built for AI agents.",
+  "description": "TMDB read source for the skeem CLI.",
   "license": "MIT",
   "author": "Brent Doll <brent.doll@gmail.com>",
   "homepage": "https://github.com/ambirex/skeem#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ambirex/skeem.git",
-    "directory": "packages/skeem"
+    "directory": "packages/skeem-tmdb"
   },
   "bugs": {
     "url": "https://github.com/ambirex/skeem/issues"
   },
   "keywords": [
-    "cli",
-    "directus",
-    "headless",
-    "schema",
-    "agents",
-    "ai",
-    "llm"
+    "skeem",
+    "tmdb",
+    "read-source",
+    "movies"
   ],
   "type": "module",
   "engines": {
     "node": ">=20"
-  },
-  "bin": {
-    "skeem": "./dist/bin/skeem.js"
   },
   "types": "./dist/src/index.d.ts",
   "exports": {
@@ -41,21 +35,13 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "dev": "node --enable-source-maps --import tsx ./bin/skeem.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "npm run build"
-  },
-  "dependencies": {
-    "@skeems/directus": "0.1.0",
-    "@skeems/openlibrary": "0.1.0",
-    "@skeems/tmdb": "0.1.0",
-    "@skeems/wikidata": "0.1.0",
-    "yaml": "^2.8.1"
-  },
-  "devDependencies": {
-    "tsx": "^4.20.6"
   }
 }
