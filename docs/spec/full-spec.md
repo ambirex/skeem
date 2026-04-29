@@ -1196,7 +1196,7 @@ skeem extend status                     # Show installed extensions
 ### Extension structure
 
 ```
-@skeem/extend-memory/
+@skeems/extend-memory/
 ├── skeem-extension.yaml              # Manifest
 ├── schema.skeem.yaml                 # Collections to provision
 ├── src/
@@ -1243,7 +1243,7 @@ Installation provisions collections via `skeem define`, registers in
 ### Schema
 
 ```yaml
-# @skeem/extend-memory/schema.skeem.yaml
+# @skeems/extend-memory/schema.skeem.yaml
 name: skeem-memory
 
 collections:
@@ -1424,7 +1424,7 @@ it has access to, and all public spaces.
 ### Schema
 
 ```yaml
-# @skeem/extend-kg/schema.skeem.yaml
+# @skeems/extend-kg/schema.skeem.yaml
 name: skeem-kg
 
 collections:
@@ -1535,8 +1535,8 @@ then writes results to the KG with source links back to the memory entry.
 
 | Extension | Package | Description |
 |---|---|---|
-| `memory` | `@skeem/extend-memory` | Scoped agent memory with conversations and lifecycle |
-| `kg` | `@skeem/extend-kg` | Lightweight SQL knowledge graph |
+| `memory` | `@skeems/extend-memory` | Scoped agent memory with conversations and lifecycle |
+| `kg` | `@skeems/extend-kg` | Lightweight SQL knowledge graph |
 
 ### Planned extensions
 
@@ -2362,7 +2362,7 @@ Enough to be useful for a single developer or agent against one Directus instanc
 2. `--warn-partial`: permission-aware discovery.
 3. Adapter conformance test suite.
 4. Documentation, README, adapter authoring guide.
-5. npm publish: `skeem`, `skeem-directus`, `@skeem/extend-memory`, `@skeem/extend-kg`.
+5. npm publish: `skeem`, `skeem-directus`, `@skeems/extend-memory`, `@skeems/extend-kg`.
 
 ### Phase 7 — Platform surfaces
 

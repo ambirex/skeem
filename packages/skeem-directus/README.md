@@ -1,4 +1,4 @@
-# @skeem/directus
+# @skeems/directus
 
 Directus adapter for `skeem`.
 
@@ -20,7 +20,7 @@ Most product behavior stays in the core package. This adapter aims to stay thin 
 ## Common Commands
 
 ```bash
-npm run build --workspace @skeem/directus
-npm run test --workspace @skeem/directus
-npm run typecheck --workspace @skeem/directus
+npm run build --workspace @skeems/directus
+npm run test --workspace @skeems/directus
+npm run typecheck --workspace @skeems/directus
 ```
