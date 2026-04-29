@@ -3,7 +3,7 @@ import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import YAML from "yaml";
 
-import { createDirectusAdapter } from "@skeem/directus";
+import { createDirectusAdapter } from "@skeems/directus";
 
 import { SchemaCache } from "../cache/schema-cache.js";
 import {

@@ -28,11 +28,17 @@ The next roadmap item is extension registry groundwork. See [docs/next-slices.md
 ## Install
 
 ```bash
-npm install -g @skeem/cli
+npx skeem ls --url http://127.0.0.1:8055 --token "$DIRECTUS_TOKEN"
+```
+
+Or install globally:
+
+```bash
+npm install -g skeem
 skeem ls --url http://127.0.0.1:8055 --token "$DIRECTUS_TOKEN"
 ```
 
-`@skeem/cli` pulls in `@skeem/directus` automatically. Node 20+ is required.
+`skeem` pulls in `@skeems/directus` automatically. Node 20+ is required.
 
 ### From source
 

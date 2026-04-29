@@ -13,8 +13,8 @@ Initial release.
 
 ### Added
 
-- `@skeem/cli` — relational-aware CLI for headless backends, built for AI agents.
-- `@skeem/directus` — Directus adapter for the skeem CLI.
+- `skeem` — relational-aware CLI for headless backends, built for AI agents.
+- `@skeems/directus` — Directus adapter for the skeem CLI.
 - Discovery (`ls`, `describe`, `discover`), CRUD (`create`, `find`, `update`, `delete`),
   relation-aware writes (`upsert`, `link`, `unlink`), and compound `exec`.
 - Schema management: `discover`, `diff`, `define`.

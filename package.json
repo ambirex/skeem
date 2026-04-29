@@ -7,8 +7,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @skeem/directus && npm run build -w @skeem/cli",
-    "dev": "npm run dev --workspace @skeem/cli",
+    "build": "npm run build -w @skeems/directus && npm run build -w skeem",
+    "dev": "npm run dev --workspace skeem",
     "eval:run": "npm run build && node ./test/evals/run.mjs",
     "eval:nano-gpt:models": "node ./test/evals/providers/nano-gpt-models.mjs",
     "eval:provider:sample": "npm run build && node ./test/evals/run.mjs --case ./test/evals/cases/01-discovery-and-read.json --provider command --provider-command 'node ./test/evals/providers/sample-command-provider.mjs'",

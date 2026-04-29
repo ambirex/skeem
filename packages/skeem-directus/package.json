@@ -1,5 +1,5 @@
 {
-  "name": "@skeem/directus",
+  "name": "@skeems/directus",
   "version": "0.1.0",
   "description": "Directus adapter for the skeem CLI.",
   "license": "MIT",

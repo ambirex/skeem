@@ -1,4 +1,4 @@
-# @skeem/cli
+# skeem
 
 Core `skeem` package containing the CLI entrypoint and backend-agnostic runtime.
 
@@ -23,9 +23,9 @@ Core `skeem` package containing the CLI entrypoint and backend-agnostic runtime.
 ## Common Commands
 
 ```bash
-npm run build --workspace @skeem/cli
-npm run test --workspace @skeem/cli
-npm run typecheck --workspace @skeem/cli
+npm run build --workspace skeem
+npm run test --workspace skeem
+npm run typecheck --workspace skeem
 ```
 
 The root-level docs live at:
