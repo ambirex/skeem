@@ -498,7 +498,7 @@ try {
   }
 
   if (process.env.TMDB_API_KEY) {
-    const tmdbLiveGet = await runSkeemJson(["source", "get", "movies", "27205"], {
+    const tmdbLiveGet = await runSkeemJson(["source", "get", "movies", "movies", "27205"], {
       cwd: sourceWorkspaceDir,
       skipConnectionFlags: true,
       env: { SKEEM_SMOKE_TOKEN: adminToken, TMDB_API_KEY: process.env.TMDB_API_KEY },
@@ -509,6 +509,7 @@ try {
     const tmdbLiveFind = await runSkeemJson([
       "source",
       "find",
+      "movies",
       "movies",
       "--where",
       "query=Inception",
