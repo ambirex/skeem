@@ -4,10 +4,10 @@ This repository is an active implementation of `skeem`, a relational-aware CLI f
 
 ## Source Of Truth
 
-- Start with [README.md](/Users/brent/dev/skeem/README.md) for the current repo overview.
-- Use [docs/README.md](/Users/brent/dev/skeem/docs/README.md) as the documentation map.
-- Use [docs/spec/full-spec.md](/Users/brent/dev/skeem/docs/spec/full-spec.md) for the original complete design document.
-- Use [docs/next-slices.md](/Users/brent/dev/skeem/docs/next-slices.md) for roadmap status and the next logical implementation target.
+- Start with [README.md](README.md) for the current repo overview.
+- Use [docs/README.md](docs/README.md) as the documentation map.
+- Use [docs/spec/full-spec.md](docs/spec/full-spec.md) for the original complete design document.
+- Use [docs/next-slices.md](docs/next-slices.md) for roadmap status and the next logical implementation target.
 - Prefer current code and smoke tests over stale assumptions about what is or is not implemented.
 
 ## Current State
@@ -18,7 +18,7 @@ This repository is an active implementation of `skeem`, a relational-aware CLI f
 
 ## Default Scope
 
-- If the user asks to "take the next slice," use [docs/next-slices.md](/Users/brent/dev/skeem/docs/next-slices.md).
+- If the user asks to "take the next slice," use [docs/next-slices.md](docs/next-slices.md).
 - Otherwise, prefer the smallest vertical slice that extends the current implementation cleanly.
 - Keep the CLI optimized for agent usage: stable envelopes, explicit behaviors, and schema-aware workflows.
 

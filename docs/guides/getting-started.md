@@ -124,6 +124,6 @@ npm run smoke:directus
 
 Key docs from here:
 
-- [Agent Workflows](/Users/brent/dev/skeem/docs/guides/agent-workflows.md)
-- [CLI Reference](/Users/brent/dev/skeem/docs/reference/cli.md)
-- [Configuration Reference](/Users/brent/dev/skeem/docs/reference/configuration.md)
+- [Agent Workflows](agent-workflows.md)
+- [CLI Reference](../reference/cli.md)
+- [Configuration Reference](../reference/configuration.md)

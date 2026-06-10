@@ -162,7 +162,7 @@ Each case should be a small JSON document with:
 - `success_checks`
 - `failure_modes`
 
-These files live in [test/evals/cases](/Users/brent/dev/skeem/test/evals/cases).
+These files live in [test/evals/cases](../../test/evals/cases).
 
 ### Verifiers
 
@@ -222,11 +222,11 @@ Do not start with token-optimization or fancy rubric scores. Those can come late
 
 ## Recommended First Five Cases
 
-- [01-discovery-and-read.json](/Users/brent/dev/skeem/test/evals/cases/01-discovery-and-read.json)
-- [02-relational-create.json](/Users/brent/dev/skeem/test/evals/cases/02-relational-create.json)
-- [03-retriable-update.json](/Users/brent/dev/skeem/test/evals/cases/03-retriable-update.json)
-- [04-claim-and-annotate.json](/Users/brent/dev/skeem/test/evals/cases/04-claim-and-annotate.json)
-- [05-schema-drift-review.json](/Users/brent/dev/skeem/test/evals/cases/05-schema-drift-review.json)
+- [01-discovery-and-read.json](../../test/evals/cases/01-discovery-and-read.json)
+- [02-relational-create.json](../../test/evals/cases/02-relational-create.json)
+- [03-retriable-update.json](../../test/evals/cases/03-retriable-update.json)
+- [04-claim-and-annotate.json](../../test/evals/cases/04-claim-and-annotate.json)
+- [05-schema-drift-review.json](../../test/evals/cases/05-schema-drift-review.json)
 
 ## What Not To Overbuild Yet
 
@@ -252,7 +252,7 @@ That is the point where provider adapters start being worth the effort.
 
 ## Current Runner
 
-The repo now includes a first-pass runner at [test/evals/run.mjs](/Users/brent/dev/skeem/test/evals/run.mjs).
+The repo now includes a first-pass runner at [test/evals/run.mjs](../../test/evals/run.mjs).
 
 It currently:
 
@@ -267,9 +267,9 @@ It currently:
 
 Useful entry points:
 
-- [test/evals/README.md](/Users/brent/dev/skeem/test/evals/README.md)
-- [test/evals/transcripts/01-discovery-and-read.sample.json](/Users/brent/dev/skeem/test/evals/transcripts/01-discovery-and-read.sample.json)
-- [test/evals/providers/sample-command-provider.mjs](/Users/brent/dev/skeem/test/evals/providers/sample-command-provider.mjs)
+- [test/evals/README.md](../../test/evals/README.md)
+- [test/evals/transcripts/01-discovery-and-read.sample.json](../../test/evals/transcripts/01-discovery-and-read.sample.json)
+- [test/evals/providers/sample-command-provider.mjs](../../test/evals/providers/sample-command-provider.mjs)
 
 Example:
 

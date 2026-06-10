@@ -81,7 +81,7 @@ NANO_GPT_API_KEY=... npm run eval:run -- \
   --model <nano-gpt-model-id>
 ```
 
-The runner writes result JSON files under [test/evals/results](/Users/brent/dev/skeem/test/evals/results) and keeps a per-run workspace under `test/.tmp/eval-harness/runs/`.
+The runner writes result JSON files under [test/evals/results](results) and keeps a per-run workspace under `test/.tmp/eval-harness/runs/`.
 
 ## Eval Principles
 
@@ -130,12 +130,12 @@ The command-backed provider receives a JSON payload on stdin containing:
 - current conversation messages
 - prior execution history
 
-See [test/evals/providers/sample-command-provider.mjs](/Users/brent/dev/skeem/test/evals/providers/sample-command-provider.mjs) for the smallest working example.
+See [test/evals/providers/sample-command-provider.mjs](providers/sample-command-provider.mjs) for the smallest working example.
 
 Nano-GPT-specific helpers:
 
-- [test/evals/providers/nano-gpt.mjs](/Users/brent/dev/skeem/test/evals/providers/nano-gpt.mjs) for live eval runs
-- [test/evals/providers/nano-gpt-models.mjs](/Users/brent/dev/skeem/test/evals/providers/nano-gpt-models.mjs) for listing models with `?detailed=true`
+- [test/evals/providers/nano-gpt.mjs](providers/nano-gpt.mjs) for live eval runs
+- [test/evals/providers/nano-gpt-models.mjs](providers/nano-gpt-models.mjs) for listing models with `?detailed=true`
 
 The Nano-GPT provider fetches model metadata up front and records capabilities like `structured_output`, `tool_calling`, `reasoning`, `context_length`, and pricing in the eval result.
 

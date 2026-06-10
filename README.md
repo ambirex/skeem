@@ -6,7 +6,7 @@ Relational-aware CLI for headless backends, built for AI agents.
 
 ## Status
 
-`skeem` is usable from source today.
+`skeem` 0.1.x is published to npm: run it with `npx skeem` or install it globally. Node 20+ is required.
 
 - Directus adapter with schema introspection
 - Discovery, CRUD, upsert, link, unlink, and compound `exec`
@@ -19,11 +19,17 @@ The next roadmap item is extension registry groundwork. See [docs/next-slices.md
 
 ## Why Agents Use It
 
+- Coordination primitives: claims, provenance, versions, trash, annotations, and idempotency keep multi-agent writes safe and auditable — the layer raw backend APIs don't provide.
+- Compact relational grammar: agents can create or resolve related records without hand-building multiple API calls.
 - Schema-aware discovery: `ls`, `describe`, and `discover` let an agent inspect the backend before acting.
 - Predictable output: every command can return a stable JSON envelope with `--json`.
-- Compact relational grammar: agents can create or resolve related records without hand-building multiple API calls.
-- Coordination primitives: provenance, claims, annotations, versions, trash, and idempotency help keep multi-agent workflows sane.
 - Backend abstraction: core behavior lives in `packages/skeem`; the current adapter targets Directus.
+
+## Where It Fits
+
+- Versus hand-rolled REST/SDK calls: one schema-aware command replaces several API requests, with idempotency, provenance, and stable JSON built in.
+- Versus an MCP server: `skeem` is a plain CLI, so any agent with shell access can drive it — no server process, low token overhead, and it composes with pipes and scripts.
+- `skeem` is not an ORM, a migration framework, or a database client: it works at the API level of the backend and delegates storage concerns to it.
 
 ## Install
 

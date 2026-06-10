@@ -18,3 +18,11 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - run: npm test
+      - name: Verify package contents exclude tests
+        run: |
+          pack_output=$(npm pack --dry-run -w @skeems/directus -w skeem 2>&1)
+          echo "$pack_output"
+          if echo "$pack_output" | grep -E '\.test\.'; then
+            echo "::error::npm pack output contains test artifacts"
+            exit 1
+          fi

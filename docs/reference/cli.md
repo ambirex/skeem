@@ -175,3 +175,15 @@ Error envelopes use:
   }
 }
 ```
+
+## Exit Codes
+
+`skeem` currently uses two exit codes:
+
+- `0` — the command succeeded.
+- `1` — the command failed for any reason (usage, validation, auth, not found, backend errors).
+
+Programmatic callers should branch on the JSON envelope's `error.code` (for example
+`NOT_FOUND`, `VALIDATION`, `AUTH`, `DUPLICATE`, `USAGE`) rather than on the process
+exit code; the exit code only signals success or failure. More granular exit codes
+may be added later without changing the envelope contract.

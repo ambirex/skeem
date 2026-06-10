@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-06-10
+
+### Fixed
+
+- Stop shipping stale compiled test artifacts in the published packages: `build`
+  now cleans `dist/` before compiling, and CI fails if `npm pack` would include
+  test files.
+
+### Changed
+
+- README: document npm availability, lead with the coordination primitives, and
+  add a short "Where It Fits" comparison.
+- CLI reference: document exit-code semantics (`0` success, `1` failure; the
+  JSON `error.code` is the programmatic contract).
+
 ## [0.1.0] - 2026-04-29
 
 Initial release.
@@ -23,5 +38,6 @@ Initial release.
 - Stable JSON envelopes for agent-friendly output.
 - End-to-end smoke harness against a local Directus fixture.
 
-[Unreleased]: https://github.com/ambirex/skeem/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ambirex/skeem/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/ambirex/skeem/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/ambirex/skeem/releases/tag/v0.1.0
