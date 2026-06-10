@@ -37,3 +37,9 @@ export function makeAssert(adapterName) {
     }
   };
 }
+
+/** Pause between CLI invocations — each spawn is its own process, so the
+ *  adapter's in-process throttle can't space them for rate-limited sources. */
+export function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

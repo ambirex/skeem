@@ -14,6 +14,7 @@ const REGISTRY: Record<string, () => Promise<AdapterFactory>> = {
   nocodb: async () => (await import("@skeems/nocodb")).createNocoDbAdapter,
   strapi: async () => (await import("@skeems/strapi")).createStrapiAdapter,
   wikidata: async () => (await import("@skeems/wikidata")).createWikiDataAdapter,
+  musicbrainz: async () => (await import("@skeems/musicbrainz")).createMusicBrainzAdapter,
 };
 
 export function knownAdapters(): string[] {

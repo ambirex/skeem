@@ -22,6 +22,9 @@
       ],
       "@skeems/wikidata": [
         "packages/skeem-wikidata/src/index.ts"
+      ],
+      "@skeems/musicbrainz": [
+        "packages/skeem-musicbrainz/src/index.ts"
       ]
     },
     "strict": true,

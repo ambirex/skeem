@@ -50,6 +50,7 @@
   },
   "dependencies": {
     "@skeems/directus": "0.5.0",
+    "@skeems/musicbrainz": "0.5.0",
     "@skeems/nocodb": "0.5.0",
     "@skeems/pocketbase": "0.5.0",
     "@skeems/strapi": "0.5.0",

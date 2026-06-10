@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **MusicBrainz adapter** (`@skeems/musicbrainz`), read tier: six collections
+  (`artists`, `release_groups`, `releases`, `recordings`, `works`, `labels`)
+  keyed by MBID over the WS/2 API (no auth; in-process ~1 req/s throttle +
+  descriptive User-Agent). `get` normalizes URL relationships into the shared
+  `externalIds` vocabulary (wikidata/imdb/viaf/isni + official_website/
+  wikipedia) and keeps every other relation type as raw URLs under `links`;
+  `find` searches by name/title as a quoted Lucene phrase with native
+  `--limit`/`--offset`. Live smoke: `npm run smoke:musicbrainz`.
+
 - **External-ID hub on the WikiData adapter** (`docs/reference/external-ids.md`):
   `get` now returns external identifiers under `externalIds` with a shared key
   vocabulary (`imdb`, `doi`, `musicbrainz_artist`, … — curated from 29 verified

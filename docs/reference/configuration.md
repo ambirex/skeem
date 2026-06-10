@@ -73,6 +73,7 @@ extra keys differ:
 | `nocodb` | `@skeems/nocodb` | Full | `url`, `token` (an `xc-token` API token), `base` (base id; optional when the instance hosts one base) |
 | `strapi` | `@skeems/strapi` | Data | `url`, `token` (API token, for CRUD), and `email` + `password` or `adminToken` (for schema introspection) |
 | `wikidata` | `@skeems/wikidata` | Read | `url` (default `https://www.wikidata.org`), `language` (default `en`); no auth |
+| `musicbrainz` | `@skeems/musicbrainz` | Read | `url` (default `https://musicbrainz.org`); no auth (client enforces ~1 req/s etiquette) |
 
 ```yaml
 # PocketBase via email/password
