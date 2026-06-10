@@ -11,6 +11,7 @@ type AdapterFactory = () => SkemAdapter;
 const REGISTRY: Record<string, () => Promise<AdapterFactory>> = {
   directus: async () => (await import("@skeems/directus")).createDirectusAdapter,
   pocketbase: async () => (await import("@skeems/pocketbase")).createPocketBaseAdapter,
+  nocodb: async () => (await import("@skeems/nocodb")).createNocoDbAdapter,
 };
 
 export function knownAdapters(): string[] {

@@ -60,6 +60,40 @@ Top-level fields:
 - `cache.ttl_seconds` or `cache.ttl_ms`: schema cache TTL
 - `extensions`: reserved extension config bucket
 
+## Adapters
+
+The `adapter` field selects the backend. Each adapter ships as its own package
+(a dependency of the CLI) and reads the same `connection` block, but the auth and
+extra keys differ:
+
+| Adapter | Package | Tier | `connection` keys |
+| --- | --- | --- | --- |
+| `directus` (default) | `@skeems/directus` | Full | `url`, `token` |
+| `pocketbase` | `@skeems/pocketbase` | Full | `url`, and either `token` (superuser token) or `email` + `password` |
+| `nocodb` | `@skeems/nocodb` | Full | `url`, `token` (an `xc-token` API token), `base` (base id; optional when the instance hosts one base) |
+
+```yaml
+# PocketBase via email/password
+adapter: pocketbase
+connection:
+  url: http://127.0.0.1:8090
+  email: admin@example.com
+  password: ${POCKETBASE_PASSWORD}
+```
+
+```yaml
+# NocoDB with an explicit base id
+adapter: nocodb
+connection:
+  url: http://127.0.0.1:8080
+  token: ${NOCODB_TOKEN}
+  base: pXXXXXXXXXXXXXX
+```
+
+Adapter-specific behavior and limitations are documented in each package's
+README (for example, PocketBase and NocoDB introspect many-to-many relations but
+do not support record-level `link`/`unlink` over them).
+
 ## Environment Variables
 
 Supported env overrides:

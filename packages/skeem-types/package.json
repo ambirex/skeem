@@ -1,6 +1,6 @@
 {
   "name": "@skeems/types",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Shared types for the skeem CLI and its backend adapters.",
   "license": "MIT",
   "author": "Brent Doll <brent.doll@gmail.com>",

@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-10
+
+### Added
+
+- **NocoDB adapter** (`@skeems/nocodb`): full-tier support for NocoDB v2 —
+  discovery, CRUD, schema mutation (`define` + enum via SingleSelect), and system
+  features. Auth via an `xc-token` API token; `connection.base` pins the base
+  (auto-selected when the instance has one). The adapter keeps a name↔id catalog
+  because NocoDB addresses tables/columns by id, canonicalizes the primary key to
+  `id`, and skips NocoDB's system/virtual columns so a defined schema diffs clean.
+  `bt` links map to m2o (fully writable); `mm`/`hm` links are introspected and
+  m2m can be created via `define`, but record-level `link`/`unlink` over a native
+  `mm` link is not supported (NocoDB hides the junction the link path writes to).
+- `nocodb` is registered in the adapter registry and runnable via
+  `npm run conformance:nocodb`.
+
+### Changed
+
+- All packages bumped to `0.4.0` lockstep
+  (publish order: types → directus → pocketbase → nocodb → cli).
+- Conformance harness now drives each adapter through a generated `.skeemrc.yaml`
+  (adapter name + full connection), so adapters that authenticate with
+  email/password (PocketBase) or need a base id (NocoDB) are exercised correctly.
+
 ## [0.3.0] - 2026-06-10
 
 ### Added

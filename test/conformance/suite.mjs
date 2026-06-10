@@ -21,13 +21,19 @@ export async function runConformanceSuite(fixture) {
   await rm(workDir, { recursive: true, force: true });
   await mkdir(workDir, { recursive: true });
 
+  // Drive every command through a local config so each adapter is selected by
+  // name and gets its full connection (token, or email/password, or base id).
+  // The fixture name doubles as the adapter name in the registry.
+  await writeFile(path.join(workDir, ".skeemrc.yaml"), JSON.stringify({
+    adapter: fixture.name,
+    connection: fixture.connection,
+  }, null, 2));
+
   const runSkeemJson = (args, options = {}) => {
     const cli = runCommand("node", [
       cliEntry,
       ...args,
       "--json",
-      "--url", fixture.connection.url,
-      "--token", fixture.connection.token,
     ], { cwd: workDir, ...(options.input ? { input: `${options.input}\n` } : {}) });
     if (!options.expectFailure && cli.status !== 0) {
       throw new Error(`skeem ${args[0]} failed:\n${cli.stderr || cli.stdout}`);
