@@ -16,6 +16,9 @@
       ],
       "@skeems/nocodb": [
         "packages/skeem-nocodb/src/index.ts"
+      ],
+      "@skeems/strapi": [
+        "packages/skeem-strapi/src/index.ts"
       ]
     },
     "strict": true,

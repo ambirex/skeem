@@ -1,6 +1,6 @@
 {
   "name": "skeem",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Relational-aware CLI for headless backends, built for AI agents.",
   "license": "MIT",
   "author": "Brent Doll <brent.doll@gmail.com>",
@@ -49,10 +49,11 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@skeems/directus": "0.4.0",
-    "@skeems/nocodb": "0.4.0",
-    "@skeems/pocketbase": "0.4.0",
-    "@skeems/types": "0.4.0",
+    "@skeems/directus": "0.5.0",
+    "@skeems/nocodb": "0.5.0",
+    "@skeems/pocketbase": "0.5.0",
+    "@skeems/strapi": "0.5.0",
+    "@skeems/types": "0.5.0",
     "yaml": "^2.8.1"
   },
   "devDependencies": {

@@ -2,7 +2,7 @@
 
 A ranked menu of candidate backend integrations, ordered by how welcome each would be to the people who actually run a tool like skeem: self-hosters, indie hackers, agencies, and agent/automation builders. This is a prioritization menu, not a commitment — adapters carry permanent maintenance cost, and the realistic solo pace is two or three per year. The long tail belongs to community contributors once an adapter authoring guide and conformance kit exist.
 
-**Shipped so far:** Directus (`@skeems/directus`, the original), PocketBase (`@skeems/pocketbase`), and NocoDB (`@skeems/nocodb`). Each is validated by the cross-adapter conformance suite under `test/conformance/`. Strapi (Data-tier) is next.
+**Shipped so far:** Directus (`@skeems/directus`, the original, Full), PocketBase (`@skeems/pocketbase`, Full), NocoDB (`@skeems/nocodb`, Full), and Strapi (`@skeems/strapi`, **Data**). Each is wired into the cross-adapter conformance suite under `test/conformance/` (Strapi runs the data-tier subset against a user-provided instance). That completes the plan's "suggested first three" (plus Strapi); Supabase is the natural next Full-tier target.
 
 ## How the ranking works
 
@@ -27,7 +27,7 @@ These validate the adapter abstraction and hit the core audience hardest.
 |---|---------|------|-----|-----------|
 | 1 | Supabase | Full | The default backend of the agent-builder crowd; named in the original spec | Postgres relations; data via PostgREST API; schema via management API or SQL channel; hosts system tables natively |
 | 2 | PocketBase ✅ | Full | Single-binary SQLite backend beloved by indie hackers; the cheapest full-capability proof of the abstraction | **Shipped (`@skeems/pocketbase`).** Collections API maps almost 1:1 to `SkemAdapter` including schema mutation; trivial Docker fixture. m2m is introspect-only (no junction tables) |
-| 3 | Strapi | Data→Full | Largest open-source headless CMS community | Content-type builder API mutates schema only in dev mode — ship data-first, document the `define` constraint honestly |
+| 3 | Strapi ✅ | Data | Largest open-source headless CMS community | **Shipped (`@skeems/strapi`, data tier).** Strapi v5 REST for CRUD (documentId-keyed, flat responses); introspection via the admin content-type-builder API (admin JWT — API tokens are 403'd there). No schema mutation: content types are code-defined, so `define`/`init` are unsupported by design |
 | 4 | NocoDB ✅ | Full | Self-hosted Airtable-on-any-database; ops and internal-tools crowd | **Shipped (`@skeems/nocodb`).** Meta API covers tables, fields, and links; addresses everything by id (adapter keeps a name↔id catalog). m2o full; m2m introspect + `define` only — native `mm` hides its junction from the link path |
 | 5 | Airtable | Full | The automation crowd's default datastore; enormous reach | Records API plus Meta API for schema; linked records map to relations; hosted-only, so smoke needs a sandbox base |
 | 6 | Appwrite | Full | Large open-source Firebase-alternative community | Databases/attributes/relationships all manageable via API; Docker fixture available |

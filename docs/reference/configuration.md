@@ -71,6 +71,7 @@ extra keys differ:
 | `directus` (default) | `@skeems/directus` | Full | `url`, `token` |
 | `pocketbase` | `@skeems/pocketbase` | Full | `url`, and either `token` (superuser token) or `email` + `password` |
 | `nocodb` | `@skeems/nocodb` | Full | `url`, `token` (an `xc-token` API token), `base` (base id; optional when the instance hosts one base) |
+| `strapi` | `@skeems/strapi` | Data | `url`, `token` (API token, for CRUD), and `email` + `password` or `adminToken` (for schema introspection) |
 
 ```yaml
 # PocketBase via email/password
@@ -89,6 +90,21 @@ connection:
   token: ${NOCODB_TOKEN}
   base: pXXXXXXXXXXXXXX
 ```
+
+```yaml
+# Strapi (data tier): API token for CRUD, admin login for introspection
+adapter: strapi
+connection:
+  url: http://127.0.0.1:1337
+  token: ${STRAPI_API_TOKEN}
+  email: admin@example.com
+  password: ${STRAPI_ADMIN_PASSWORD}
+```
+
+Strapi is **data-tier**: discovery and CRUD work, but `define`/`init` are
+unsupported (Strapi content types are code-defined). Introspection uses the
+admin content-type-builder API, which rejects API tokens — hence the admin
+credentials.
 
 Adapter-specific behavior and limitations are documented in each package's
 README (for example, PocketBase and NocoDB introspect many-to-many relations but

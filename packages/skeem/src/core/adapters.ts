@@ -12,6 +12,7 @@ const REGISTRY: Record<string, () => Promise<AdapterFactory>> = {
   directus: async () => (await import("@skeems/directus")).createDirectusAdapter,
   pocketbase: async () => (await import("@skeems/pocketbase")).createPocketBaseAdapter,
   nocodb: async () => (await import("@skeems/nocodb")).createNocoDbAdapter,
+  strapi: async () => (await import("@skeems/strapi")).createStrapiAdapter,
 };
 
 export function knownAdapters(): string[] {

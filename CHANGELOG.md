@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-10
+
+### Added
+
+- **Strapi adapter** (`@skeems/strapi`), **data tier**: discovery and CRUD for
+  Strapi v5 — `ls`/`describe`/`discover`/`diff`/`get`/`find`/`create`/`update`/
+  `delete`/`count`. Schema mutation is intentionally unsupported (Strapi content
+  types are code-defined), so `define`/`init` fail with skeem's standard
+  capability errors. CRUD uses the public `/api/*` routes with a Bearer API
+  token; schema introspection uses the admin content-type-builder API (admin JWT
+  via `email`/`password` or `adminToken`, since API tokens cannot read it).
+  Strapi v5 `documentId` is canonicalized to `id`.
+- `strapi` is registered in the adapter registry and wired into the conformance
+  harness (`npm run conformance:strapi`, against a user-provided instance — its
+  data tier runs discovery + CRUD + diff only).
+
+### Changed
+
+- All packages bumped to `0.5.0` lockstep (publish order: types → directus →
+  pocketbase → nocodb → strapi → cli).
+
 ## [0.4.0] - 2026-06-10
 
 ### Added
