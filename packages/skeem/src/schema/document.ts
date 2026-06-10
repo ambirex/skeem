@@ -71,14 +71,9 @@ export function normalizeSchemaDocument(input: unknown): SchemaDocument {
     ];
   }));
 
-  const relations = document.relations === undefined
-    ? undefined
-    : normalizeRelationList(document.relations, 'Schema document "relations" must be an array of strings.');
-
   return {
     name: typeof document.name === "string" ? document.name : "declared-schema",
     collections,
-    ...(relations && relations.length > 0 ? { relations } : {}),
   };
 }
 
@@ -125,6 +120,24 @@ function normalizeRelationDefinition(
   return {
     collection: relatedCollection,
     type: type as Relation["type"],
+    ...optionalRelationField(collectionName, fieldName, "relatedField", relation.relatedField),
+    ...optionalRelationField(collectionName, fieldName, "junctionCollection", relation.junctionCollection),
+    ...optionalRelationField(collectionName, fieldName, "junctionField", relation.junctionField),
+    ...optionalRelationField(collectionName, fieldName, "inverseJunctionField", relation.inverseJunctionField),
+  };
+}
+
+function optionalRelationField(
+  collectionName: string,
+  fieldName: string,
+  key: string,
+  value: unknown,
+): Record<string, string> {
+  if (value === undefined) {
+    return {};
+  }
+  return {
+    [key]: expectString(value, `Relation "${collectionName}.${fieldName}" ${key} must be a string.`),
   };
 }
 
@@ -138,12 +151,6 @@ function normalizeUniqueConstraints(input: unknown, collectionName: string): str
       value,
       `Unique constraint ${index + 1} on "${collectionName}" must be an array of field names.`,
     )),
-  );
-}
-
-function normalizeRelationList(input: unknown, message: string): string[] {
-  return Array.from(new Set(normalizeStringArray(input, message).map(normalizeRelationString))).sort(
-    (left, right) => left.localeCompare(right),
   );
 }
 
@@ -168,15 +175,6 @@ function dedupeSortedArrays(values: string[][]): string[][] {
   }
 
   return result.sort((left, right) => left.join(",").localeCompare(right.join(",")));
-}
-
-function normalizeRelationString(value: string): string {
-  const [left, right, ...rest] = value.split("<->").map((part) => part.trim());
-  if (rest.length > 0 || !left || !right) {
-    throw new UsageError(`Many-to-many relation "${value}" must use the form "collection_a <-> collection_b".`);
-  }
-
-  return [left, right].sort((a, b) => a.localeCompare(b)).join(" <-> ");
 }
 
 function expectRecord(input: unknown, message: string): Record<string, unknown> {

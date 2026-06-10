@@ -208,6 +208,10 @@ try {
       collection: "projects",
       type: "m2o",
     },
+    labels: {
+      collection: "labels",
+      type: "m2m",
+    },
   };
   defineInput.collections.labels = {
     fields: {
@@ -217,8 +221,15 @@ try {
         unique: true,
       },
     },
+    // m2m is declared on both collections; the plan collapses the two sides
+    // into a single junction create.
+    relations: {
+      widgets: {
+        collection: "widgets",
+        type: "m2m",
+      },
+    },
   };
-  defineInput.relations = [...(defineInput.relations ?? []), "widgets <-> labels"];
   await writeFile(defineInputPath, JSON.stringify(defineInput, null, 2));
 
   const defineDryRun = await runSkeemJson(["define", defineInputPath, "--dry-run"]);
@@ -250,7 +261,8 @@ try {
   }
 
   const discoveredAfterDefine = await runSkeemJson(["discover"]);
-  if (!discoveredAfterDefine.ok || !Array.isArray(discoveredAfterDefine.data?.relations) || !discoveredAfterDefine.data.relations.includes("labels <-> widgets")) {
+  const widgetsToLabels = discoveredAfterDefine.data?.collections?.widgets?.relations?.labels;
+  if (!discoveredAfterDefine.ok || widgetsToLabels?.type !== "m2m" || widgetsToLabels?.collection !== "labels") {
     throw new Error(`Discover should surface the new many-to-many relation:\n${JSON.stringify(discoveredAfterDefine, null, 2)}`);
   }
 
@@ -1106,7 +1118,8 @@ try {
   const defineDestructive = JSON.parse(JSON.stringify(defineInput));
   delete defineDestructive.collections.labels;
   delete defineDestructive.collections.widgets.fields.description;
-  defineDestructive.relations = [];
+  // Drop both sides of the widgets<->labels m2m along with the labels collection.
+  delete defineDestructive.collections.widgets.relations.labels;
   await writeFile(defineDestructivePath, JSON.stringify(defineDestructive, null, 2));
 
   const defineDestructiveSkip = await runSkeemJson(["define", defineDestructivePath, "--yes"]);

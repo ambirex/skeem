@@ -64,6 +64,7 @@ import type {
   Relation,
   ResolvedConfig,
   Schema,
+  SchemaRelationInput,
   SchemaPlanEntry,
   SchemaPlanSummary,
   SkemAdapter,
@@ -3055,26 +3056,12 @@ export class SkeemRuntime {
         if (!this.adapter.updateRelation) {
           throw new UsageError(`Adapter "${this.adapter.name}" does not support relation updates.`);
         }
-        const relation = entry.details?.relation;
-        if (!relation || typeof relation !== "object") {
+        const detail = entry.details?.relation;
+        if (!detail || typeof detail !== "object" || !("from" in detail) || !("to" in detail)) {
           throw new UsageError(`Schema plan entry "${entry.summary}" is missing relation details.`);
         }
-        await this.adapter.updateRelation(relation as {
-          collection: string;
-          field: string;
-          relatedCollection: string;
-          type: Relation["type"];
-          currentRelatedCollection?: string;
-          currentType?: Relation["type"];
-          inverseField?: string;
-          junctionCollection?: string;
-          junctionField?: string;
-          inverseJunctionField?: string;
-          currentInverseField?: string;
-          currentJunctionCollection?: string;
-          currentJunctionField?: string;
-          currentInverseJunctionField?: string;
-        });
+        const { from, to } = detail as { from: SchemaRelationInput; to: SchemaRelationInput };
+        await this.adapter.updateRelation(from, to);
         return;
       }
       default:

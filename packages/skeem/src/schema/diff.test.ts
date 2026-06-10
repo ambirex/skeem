@@ -22,33 +22,67 @@ collections:
       company_id:
         collection: companies
         type: m2o
+      tags:
+        collection: tags
+        type: m2m
+        junctionCollection: people_tags
+        junctionField: person_id
+        inverseJunctionField: tag_id
     uniqueConstraints:
       - [slug, company_id]
       - [company_id, slug]
-relations:
-  - tags <-> people
 `);
 
     expect(document.collections.people?.fields).toHaveProperty("company_id");
     expect(document.collections.people?.uniqueConstraints).toEqual([["company_id", "slug"]]);
-    expect(document.relations).toEqual(["people <-> tags"]);
+    expect(document.collections.people?.relations?.company_id).toEqual({
+      collection: "companies",
+      type: "m2o",
+    });
+    expect(document.collections.people?.relations?.tags).toEqual({
+      collection: "tags",
+      type: "m2m",
+      junctionCollection: "people_tags",
+      junctionField: "person_id",
+      inverseJunctionField: "tag_id",
+    });
   });
 
-  test("canonicalizes many-to-many relation strings regardless of order", () => {
-    const document = parseSchemaDocument(`
-name: example
-collections:
-  widgets:
-    fields:
-      name:
-        type: string
-relations:
-  - widgets <-> labels
-  - people <-> tags
-  - labels <-> widgets
-`);
+  test("treats convention-equivalent m2m relations as matching", () => {
+    // Minimal file entry; explicit live entry whose junction detail matches the
+    // people<->tags naming convention. Diff should see no change.
+    const fileDocument: SchemaDocument = {
+      name: "file",
+      collections: {
+        people: {
+          fields: { name: { type: "string" } },
+          relations: { tags: { collection: "tags", type: "m2m" } },
+        },
+      },
+    };
 
-    expect(document.relations).toEqual(["labels <-> widgets", "people <-> tags"]);
+    const liveDocument: SchemaDocument = {
+      name: "live",
+      collections: {
+        people: {
+          fields: { name: { type: "string" } },
+          relations: {
+            tags: {
+              collection: "tags",
+              type: "m2m",
+              relatedField: "people",
+              junctionCollection: "people_tags",
+              junctionField: "people_id",
+              inverseJunctionField: "tags_id",
+            },
+          },
+        },
+      },
+    };
+
+    const diff = diffSchemaDocuments(fileDocument, liveDocument, "define");
+    expect(diff.changes).toEqual([]);
+    expect(diff.matches).toEqual(["people: match"]);
   });
 });
 
@@ -72,10 +106,13 @@ describe("diffSchemaDocuments", () => {
               collection: "companies",
               type: "m2o",
             },
+            tags: {
+              collection: "tags",
+              type: "m2m",
+            },
           },
         },
       },
-      relations: ["people <-> tags"],
     };
 
     const fileDocument: SchemaDocument = {
@@ -91,6 +128,14 @@ describe("diffSchemaDocuments", () => {
               collection: "companies",
               type: "m2o",
             },
+            tags: {
+              collection: "tags",
+              type: "m2m",
+            },
+            topics: {
+              collection: "topics",
+              type: "m2m",
+            },
           },
         },
         prompts: {
@@ -99,7 +144,6 @@ describe("diffSchemaDocuments", () => {
           },
         },
       },
-      relations: ["people <-> tags", "people <-> topics"],
     };
 
     const defineDiff = diffSchemaDocuments(fileDocument, liveDocument, "define");
@@ -126,8 +170,9 @@ describe("diffSchemaDocuments", () => {
         resolution: "create_in_live",
       }),
       expect.objectContaining({
-        scope: "many_to_many_relation",
-        name: "people <-> topics",
+        scope: "relation",
+        collection: "people",
+        name: "topics",
         status: "only_in_file",
         resolution: "create_in_live",
       }),

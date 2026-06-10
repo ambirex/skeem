@@ -71,7 +71,75 @@ describe("schemaToDocument", () => {
     expect(document.collections.people?.uniqueConstraints).toEqual([["company_id", "name"]]);
     expect(document.collections.people?.fields.id).toBeUndefined();
   });
+
+  test("omits m2m junction detail that matches the convention", () => {
+    const document = schemaToDocument(makeM2mSchema("people_tags", "people_id", "tags_id", "people"), {
+      collections: ["people", "tags"],
+    });
+
+    expect(document.collections.people?.relations?.tags).toEqual({
+      collection: "tags",
+      type: "m2m",
+    });
+  });
+
+  test("emits m2m junction detail that diverges from the convention", () => {
+    const document = schemaToDocument(makeM2mSchema("link_pt", "person", "tag", "taggedPeople"), {
+      collections: ["people", "tags"],
+    });
+
+    expect(document.collections.people?.relations?.tags).toEqual({
+      collection: "tags",
+      type: "m2m",
+      relatedField: "taggedPeople",
+      junctionCollection: "link_pt",
+      junctionField: "person",
+      inverseJunctionField: "tag",
+    });
+  });
 });
+
+function makeM2mSchema(
+  junctionCollection: string,
+  junctionLocalField: string,
+  junctionForeignField: string,
+  relatedField: string,
+): Schema {
+  return {
+    collections: new Map([
+      [
+        "people",
+        {
+          name: "people",
+          primaryKey: "id",
+          fields: new Map([["id", { name: "id", type: "integer", required: false, unique: true }]]),
+          relations: [
+            {
+              type: "m2m",
+              field: "tags",
+              relatedCollection: "tags",
+              relatedField,
+              junctionCollection,
+              junctionLocalField,
+              junctionForeignField,
+            },
+          ],
+          uniqueConstraints: [],
+        },
+      ],
+      [
+        "tags",
+        {
+          name: "tags",
+          primaryKey: "id",
+          fields: new Map([["id", { name: "id", type: "integer", required: false, unique: true }]]),
+          relations: [],
+          uniqueConstraints: [],
+        },
+      ],
+    ]),
+  };
+}
 
 describe("describeCollection", () => {
   test("produces a sorted describe document", () => {

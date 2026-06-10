@@ -142,16 +142,12 @@ export interface SkemAdapter {
   createField?(collection: string, field: SchemaFieldInput): Promise<void>;
   updateField?(collection: string, fieldName: string, field: SchemaFieldInput): Promise<void>;
   createRelation?(input: SchemaRelationInput): Promise<void>;
-  updateRelation?(
-    input: SchemaRelationInput & {
-      currentRelatedCollection?: string;
-      currentType?: Relation["type"];
-      currentInverseField?: string;
-      currentJunctionCollection?: string;
-      currentJunctionField?: string;
-      currentInverseJunctionField?: string;
-    },
-  ): Promise<void>;
+  /**
+   * Change a relation by replacing `from` with `to`. Backends without a
+   * relation-update primitive (e.g. Directus) implement this as a
+   * delete-then-recreate, which is not atomic.
+   */
+  updateRelation?(from: SchemaRelationInput, to: SchemaRelationInput): Promise<void>;
   deleteField?(collection: string, fieldName: string): Promise<void>;
   deleteRelation?(input: SchemaRelationInput): Promise<void>;
   deleteCollection?(collection: string): Promise<void>;

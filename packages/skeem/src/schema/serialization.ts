@@ -1,4 +1,5 @@
 import type { Collection, Field, Relation, Schema, UniqueConstraint } from "../types/index.js";
+import { m2mConvention } from "./m2m.js";
 
 export interface SerializedSchema {
   collections: Array<{
@@ -31,12 +32,16 @@ export interface SchemaDocument {
         {
           collection: string;
           type: Relation["type"];
+          // m2m only; omit when they match the junction naming convention.
+          relatedField?: string;
+          junctionCollection?: string;
+          junctionField?: string;
+          inverseJunctionField?: string;
         }
       >;
       uniqueConstraints?: string[][];
     }
   >;
-  relations?: string[];
 }
 
 export interface DescribeDocument {
@@ -127,14 +132,11 @@ export function schemaToDocument(
 
       const relations = Object.fromEntries(
         collection.relations
-          .filter((relation) => relation.type !== "m2m" && selected.has(relation.relatedCollection))
+          .filter((relation) => selected.has(relation.relatedCollection))
           .sort((left, right) => left.field.localeCompare(right.field))
           .map((relation) => [
             relation.field,
-            {
-              collection: relation.relatedCollection,
-              type: relation.type,
-            },
+            relationToDocumentEntry(collection.name, relation),
           ]),
       );
 
@@ -154,21 +156,38 @@ export function schemaToDocument(
     }),
   );
 
-  const manyToManyRelations = Array.from(
-    new Set(
-      selectedNames.flatMap((collectionName) => {
-        const collection = requireCollection(schema, collectionName);
-        return collection.relations
-          .filter((relation) => relation.type === "m2m" && selected.has(relation.relatedCollection))
-          .map((relation) => relationString(collection.name, relation.relatedCollection));
-      }),
-    ),
-  ).sort((left, right) => left.localeCompare(right));
-
   return {
     name: options?.name ?? "discovered-schema",
     collections,
-    ...(manyToManyRelations.length > 0 ? { relations: manyToManyRelations } : {}),
+  };
+}
+
+function relationToDocumentEntry(
+  collectionName: string,
+  relation: Relation,
+): NonNullable<SchemaDocument["collections"][string]["relations"]>[string] {
+  if (relation.type !== "m2m") {
+    return { collection: relation.relatedCollection, type: relation.type };
+  }
+
+  // Omit junction detail that matches the convention so skeem-created m2m
+  // relations serialize minimally; diff canonicalizes via the same convention.
+  const convention = m2mConvention(collectionName, relation.relatedCollection);
+  return {
+    collection: relation.relatedCollection,
+    type: relation.type,
+    ...(relation.relatedField && relation.relatedField !== convention.inverseField
+      ? { relatedField: relation.relatedField }
+      : {}),
+    ...(relation.junctionCollection && relation.junctionCollection !== convention.junctionCollection
+      ? { junctionCollection: relation.junctionCollection }
+      : {}),
+    ...(relation.junctionLocalField && relation.junctionLocalField !== convention.junctionField
+      ? { junctionField: relation.junctionLocalField }
+      : {}),
+    ...(relation.junctionForeignField && relation.junctionForeignField !== convention.inverseJunctionField
+      ? { inverseJunctionField: relation.junctionForeignField }
+      : {}),
   };
 }
 
@@ -200,10 +219,6 @@ export function describeCollection(collection: Collection): DescribeDocument {
       .slice()
       .sort((left, right) => left.fields.join(",").localeCompare(right.fields.join(","))),
   };
-}
-
-function relationString(left: string, right: string): string {
-  return [left, right].sort((a, b) => a.localeCompare(b)).join(" <-> ");
 }
 
 function requireCollection(schema: Schema, collectionName: string): Collection {

@@ -1,4 +1,5 @@
 import { diffSchemaDocuments } from "./diff.js";
+import { toRelationInput } from "./m2m.js";
 import type {
   SchemaDiffChange,
   SchemaPlanEntry,
@@ -55,7 +56,7 @@ export function buildDefinePlan(
     }
   }
 
-  const plan = [
+  const plan = dedupeManyToMany([
     ...sortByCollection(createCollections),
     ...sortByField(createFields),
     ...sortByField(updateFields),
@@ -63,13 +64,34 @@ export function buildDefinePlan(
     ...sortBySummary(createManyToManyRelations),
     ...sortDestructive(destructive),
     ...sortBySummary(blocked),
-  ];
+  ]);
 
   return {
     plan,
     summary: summarizePlan(plan),
     diff,
   };
+}
+
+// A junction appears on both collections' relation maps, so the two sides
+// produce two equivalent m2m entries. Keep the first per junction collection.
+function dedupeManyToMany(plan: SchemaPlanEntry[]): SchemaPlanEntry[] {
+  const seen = new Set<string>();
+  const result: SchemaPlanEntry[] = [];
+
+  for (const entry of plan) {
+    if (entry.action === "create_many_to_many_relation" || entry.action === "remove_many_to_many_relation") {
+      const relation = entry.details?.relation as { junctionCollection?: string } | undefined;
+      const key = `${entry.action}:${relation?.junctionCollection ?? entry.summary}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+    }
+    result.push(entry);
+  }
+
+  return result;
 }
 
 function changeToPlanEntry(
@@ -191,34 +213,48 @@ function changeToPlanEntry(
         if (!relation) {
           return undefined;
         }
-        return {
+        if (relation.type === "m2m") {
+          return executableEntry({
+            action: "create_many_to_many_relation",
+            collection: change.collection,
+            field: change.name,
+            summary: `create junction: ${change.collection}.${change.name} <-> ${relation.collection}`,
+            destructive: false,
+            details: { relation: toRelationInput(change.collection, change.name, relation) },
+          });
+        }
+        if (relation.type === "m2o") {
+          return executableEntry({
+            action: "create_relation",
+            collection: change.collection,
+            field: change.name,
+            summary: `create relation: ${change.collection}.${change.name} -> ${relation.collection} (${relation.type})`,
+            destructive: false,
+            details: { relation: toRelationInput(change.collection, change.name, relation) },
+          });
+        }
+        return blockedEntry({
           action: "create_relation",
-          status: "planned",
           collection: change.collection,
           field: change.name,
-          destructive: false,
-          executable: relation.type === "m2o",
           summary: `create relation: ${change.collection}.${change.name} -> ${relation.collection} (${relation.type})`,
-          ...(relation.type === "m2o"
-            ? {
-                details: {
-                  relation: {
-                    collection: change.collection,
-                    field: change.name,
-                    relatedCollection: relation.collection,
-                    type: relation.type,
-                  },
-                },
-              }
-            : {
-                reason: "Only m2o collection-scoped relations are supported in this document format.",
-                executable: false,
-              }),
-        };
+          reason: "Only m2o and m2m relations can be created from a schema document.",
+          destructive: false,
+        });
       }
 
       if (change.status === "only_in_live") {
         const liveRelation = liveDocument.collections[change.collection]?.relations?.[change.name];
+        if (liveRelation?.type === "m2m") {
+          return executableEntry({
+            action: "remove_many_to_many_relation",
+            collection: change.collection,
+            field: change.name,
+            summary: `remove junction: ${change.collection}.${change.name} <-> ${liveRelation.collection}`,
+            destructive: true,
+            details: { relation: toRelationInput(change.collection, change.name, liveRelation) },
+          });
+        }
         return executableEntry({
           action: "remove_relation",
           collection: change.collection,
@@ -226,16 +262,7 @@ function changeToPlanEntry(
           summary: `remove relation: ${change.collection}.${change.name}`,
           destructive: true,
           ...(liveRelation
-            ? {
-                details: {
-                  relation: {
-                    collection: change.collection,
-                    field: change.name,
-                    relatedCollection: liveRelation.collection,
-                    type: liveRelation.type,
-                  },
-                },
-              }
+            ? { details: { relation: toRelationInput(change.collection, change.name, liveRelation) } }
             : {}),
         });
       }
@@ -246,6 +273,17 @@ function changeToPlanEntry(
         return undefined;
       }
 
+      if (fileRelation.type === "m2m" || liveRelation.type === "m2m") {
+        return blockedEntry({
+          action: "update_relation",
+          collection: change.collection,
+          field: change.name,
+          summary: `update relation: ${change.collection}.${change.name}`,
+          reason: "Many-to-many structural changes require manual remove and recreate.",
+          destructive: true,
+        });
+      }
+
       return executableEntry({
         action: "update_relation",
         collection: change.collection,
@@ -254,12 +292,8 @@ function changeToPlanEntry(
         destructive: true,
         details: {
           relation: {
-            collection: change.collection,
-            field: change.name,
-            relatedCollection: fileRelation.collection,
-            type: fileRelation.type,
-            currentRelatedCollection: liveRelation.collection,
-            currentType: liveRelation.type,
+            from: toRelationInput(change.collection, change.name, liveRelation),
+            to: toRelationInput(change.collection, change.name, fileRelation),
           },
         },
       });
@@ -285,28 +319,6 @@ function changeToPlanEntry(
         summary: `remove unique constraint: ${change.collection} (${change.name})`,
         reason: "Directus REST schema APIs do not expose composite unique constraints directly.",
         destructive: true,
-      });
-
-    case "many_to_many_relation":
-      if (change.status === "only_in_live") {
-        const details = parseManyToManyDetails(change.name);
-        return executableEntry({
-          action: "remove_many_to_many_relation",
-          summary: `remove junction: ${change.name}`,
-          destructive: true,
-          details: {
-            relation: details,
-          },
-        });
-      }
-
-      return executableEntry({
-        action: "create_many_to_many_relation",
-        summary: `create junction: ${change.name}`,
-        destructive: false,
-        details: {
-          relation: parseManyToManyDetails(change.name),
-        },
       });
   }
 }
@@ -388,28 +400,6 @@ function executableEntry(input: {
     summary: input.summary,
     ...(input.details ? { details: input.details } : {}),
   };
-}
-
-function parseManyToManyDetails(relationName: string): Record<string, string> {
-  const [left, right] = relationName.split(" <-> ").map((value) => value.trim());
-  if (!left || !right) {
-    throw new Error(`Invalid many-to-many relation string "${relationName}".`);
-  }
-
-  return {
-    collection: left,
-    field: right,
-    relatedCollection: right,
-    type: "m2m",
-    inverseField: left,
-    junctionCollection: makeJunctionCollectionName(left, right),
-    junctionField: `${left}_id`,
-    inverseJunctionField: `${right}_id`,
-  };
-}
-
-function makeJunctionCollectionName(left: string, right: string): string {
-  return [left, right].sort((a, b) => a.localeCompare(b)).join("_");
 }
 
 function summarizePlan(plan: SchemaPlanEntry[]): SchemaPlanSummary {

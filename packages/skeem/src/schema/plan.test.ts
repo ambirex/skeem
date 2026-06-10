@@ -41,10 +41,13 @@ describe("buildDefinePlan", () => {
               collection: "projects",
               type: "m2o",
             },
+            labels: {
+              collection: "labels",
+              type: "m2m",
+            },
           },
         },
       },
-      relations: ["widgets <-> labels"],
     };
 
     const result = buildDefinePlan(fileDocument, liveDocument);
@@ -80,11 +83,14 @@ describe("buildDefinePlan", () => {
               collection: "people",
               type: "m2o",
             },
+            tags: {
+              collection: "tags",
+              type: "m2m",
+            },
           },
           uniqueConstraints: [["legacy", "name"]],
         },
       },
-      relations: ["widgets <-> tags"],
     };
 
     const fileDocument: SchemaDocument = {
@@ -129,7 +135,7 @@ describe("buildDefinePlan", () => {
       }),
       expect.objectContaining({
         action: "remove_many_to_many_relation",
-        summary: "remove junction: widgets <-> tags",
+        summary: "remove junction: widgets.tags <-> tags",
         executable: true,
         destructive: true,
       }),
@@ -141,5 +147,90 @@ describe("buildDefinePlan", () => {
       }),
     ]));
     expect(result.summary.blocked).toBe(1);
+  });
+
+  test("emits a from/to pair for an m2o relation change", () => {
+    const liveDocument: SchemaDocument = {
+      name: "live",
+      collections: {
+        people: {
+          fields: { company_id: { type: "integer" } },
+          relations: { company_id: { collection: "companies", type: "m2o" } },
+        },
+      },
+    };
+
+    const fileDocument: SchemaDocument = {
+      name: "file",
+      collections: {
+        people: {
+          fields: { company_id: { type: "integer" } },
+          relations: { company_id: { collection: "orgs", type: "m2o" } },
+        },
+      },
+    };
+
+    const result = buildDefinePlan(fileDocument, liveDocument);
+    const update = result.plan.find((entry) => entry.action === "update_relation");
+
+    expect(update?.executable).toBe(true);
+    expect(update?.details?.relation).toEqual({
+      from: { collection: "people", field: "company_id", relatedCollection: "companies", type: "m2o" },
+      to: { collection: "people", field: "company_id", relatedCollection: "orgs", type: "m2o" },
+    });
+  });
+
+  test("collapses both sides of an m2m into a single junction entry", () => {
+    const liveDocument: SchemaDocument = { name: "live", collections: {} };
+    const fileDocument: SchemaDocument = {
+      name: "file",
+      collections: {
+        people: {
+          fields: { id: { type: "integer" } },
+          relations: { tags: { collection: "tags", type: "m2m" } },
+        },
+        tags: {
+          fields: { id: { type: "integer" } },
+          relations: { people: { collection: "people", type: "m2m" } },
+        },
+      },
+    };
+
+    const result = buildDefinePlan(fileDocument, liveDocument);
+    const junctions = result.plan.filter((entry) => entry.action === "create_many_to_many_relation");
+
+    expect(junctions).toHaveLength(1);
+    expect(junctions[0]?.details?.relation).toMatchObject({
+      type: "m2m",
+      junctionCollection: "people_tags",
+    });
+  });
+
+  test("blocks m2m structural changes", () => {
+    const liveDocument: SchemaDocument = {
+      name: "live",
+      collections: {
+        people: {
+          fields: { id: { type: "integer" } },
+          relations: { tags: { collection: "tags", type: "m2m", junctionCollection: "old_jt" } },
+        },
+      },
+    };
+
+    const fileDocument: SchemaDocument = {
+      name: "file",
+      collections: {
+        people: {
+          fields: { id: { type: "integer" } },
+          relations: { tags: { collection: "tags", type: "m2m", junctionCollection: "new_jt" } },
+        },
+      },
+    };
+
+    const result = buildDefinePlan(fileDocument, liveDocument);
+    const update = result.plan.find((entry) => entry.action === "update_relation");
+
+    expect(update?.executable).toBe(false);
+    expect(update?.reason).toMatch(/many-to-many/i);
   });
 });

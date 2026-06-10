@@ -215,74 +215,12 @@ export function createDirectusAdapter(): SkemAdapter {
       await client.delete(`/fields/${collection}/${fieldName}`);
     },
     async createRelation(input: SchemaRelationInput): Promise<void> {
-      if (input.type === "m2m") {
-        await createManyToManyRelation(client, input);
-        return;
-      }
-
-      await client.post("/relations", {
-        collection: input.collection,
-        field: input.field,
-        related_collection: input.relatedCollection,
-        schema: {
-          table: input.collection,
-          column: input.field,
-          foreign_key_table: input.relatedCollection,
-          foreign_key_column: "id",
-          on_update: "NO ACTION",
-          on_delete: "SET NULL",
-        },
-        meta: {
-          many_collection: input.collection,
-          many_field: input.field,
-          one_collection: input.relatedCollection,
-          ...(input.inverseField ? { one_field: input.inverseField } : {}),
-          one_deselect_action: "nullify",
-        },
-      });
+      await createRelationByShape(client, input);
     },
-    async updateRelation(input: SchemaRelationInput & {
-      currentRelatedCollection?: string;
-      currentType?: Relation["type"];
-      currentInverseField?: string;
-      currentJunctionCollection?: string;
-      currentJunctionField?: string;
-      currentInverseJunctionField?: string;
-    }): Promise<void> {
-      await deleteRelationByShape(client, {
-        collection: input.collection,
-        field: input.field,
-        relatedCollection: input.currentRelatedCollection ?? input.relatedCollection,
-        type: input.currentType ?? input.type,
-        ...(input.currentInverseField ? { inverseField: input.currentInverseField } : {}),
-        ...(input.currentJunctionCollection ? { junctionCollection: input.currentJunctionCollection } : {}),
-        ...(input.currentJunctionField ? { junctionField: input.currentJunctionField } : {}),
-        ...(input.currentInverseJunctionField ? { inverseJunctionField: input.currentInverseJunctionField } : {}),
-      });
-      if (input.type === "m2m") {
-        await createManyToManyRelation(client, input);
-        return;
-      }
-      await client.post("/relations", {
-        collection: input.collection,
-        field: input.field,
-        related_collection: input.relatedCollection,
-        schema: {
-          table: input.collection,
-          column: input.field,
-          foreign_key_table: input.relatedCollection,
-          foreign_key_column: "id",
-          on_update: "NO ACTION",
-          on_delete: "SET NULL",
-        },
-        meta: {
-          many_collection: input.collection,
-          many_field: input.field,
-          one_collection: input.relatedCollection,
-          ...(input.inverseField ? { one_field: input.inverseField } : {}),
-          one_deselect_action: "nullify",
-        },
-      });
+    async updateRelation(from: SchemaRelationInput, to: SchemaRelationInput): Promise<void> {
+      // Directus has no relation PATCH; replace the old shape with the new one.
+      await deleteRelationByShape(client, from);
+      await createRelationByShape(client, to);
     },
     async deleteRelation(input: SchemaRelationInput): Promise<void> {
       await deleteRelationByShape(client, input);
@@ -482,6 +420,34 @@ async function deleteManyToManyRelation(client: DirectusClient, input: SchemaRel
   await deleteFieldIfExists(client, input.collection, input.field);
   await deleteFieldIfExists(client, input.relatedCollection, inverseField);
   await deleteCollectionIfExists(client, junctionCollection);
+}
+
+async function createRelationByShape(client: DirectusClient, input: SchemaRelationInput): Promise<void> {
+  if (input.type === "m2m") {
+    await createManyToManyRelation(client, input);
+    return;
+  }
+
+  await client.post("/relations", {
+    collection: input.collection,
+    field: input.field,
+    related_collection: input.relatedCollection,
+    schema: {
+      table: input.collection,
+      column: input.field,
+      foreign_key_table: input.relatedCollection,
+      foreign_key_column: "id",
+      on_update: "NO ACTION",
+      on_delete: "SET NULL",
+    },
+    meta: {
+      many_collection: input.collection,
+      many_field: input.field,
+      one_collection: input.relatedCollection,
+      ...(input.inverseField ? { one_field: input.inverseField } : {}),
+      one_deselect_action: "nullify",
+    },
+  });
 }
 
 async function deleteRelationByShape(client: DirectusClient, input: SchemaRelationInput): Promise<void> {

@@ -63,8 +63,7 @@ export type SchemaDiffScope =
   | "collection"
   | "field"
   | "relation"
-  | "unique_constraint"
-  | "many_to_many_relation";
+  | "unique_constraint";
 
 export type SchemaDiffStatus = "only_in_file" | "only_in_live" | "mismatch";
 

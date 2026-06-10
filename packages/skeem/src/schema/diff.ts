@@ -7,6 +7,7 @@ import type {
   SchemaDiffResult,
   SchemaDiffStatus,
 } from "../types/index.js";
+import { canonicalRelation } from "./m2m.js";
 import type { SchemaDocument } from "./serialization.js";
 
 type FieldDefinition = SchemaDocument["collections"][string]["fields"][string];
@@ -34,6 +35,9 @@ export function diffSchemaDocuments(
         resolution: resolutionFor("only_in_file", direction),
         fileValue: fileCollection,
       });
+      // create_collection only carries fields, so relations on a brand-new
+      // collection must be emitted separately to be created.
+      compareRelations(collectionName, fileCollection.relations, undefined, direction, changes);
       continue;
     }
 
@@ -46,6 +50,9 @@ export function diffSchemaDocuments(
         resolution: resolutionFor("only_in_live", direction),
         liveValue: liveCollection,
       });
+      // Surface relations (notably m2m junctions, which are separate
+      // collections) so they are cleaned up alongside the removed collection.
+      compareRelations(collectionName, undefined, liveCollection.relations, direction, changes);
       continue;
     }
 
@@ -68,8 +75,6 @@ export function diffSchemaDocuments(
       matches.push(`${collectionName}: match`);
     }
   }
-
-  compareManyToManyRelations(fileDocument.relations ?? [], liveDocument.relations ?? [], direction, changes);
 
   return {
     direction,
@@ -179,7 +184,14 @@ function compareRelations(
       continue;
     }
 
-    if (!fileRelation || !liveRelation || isDeepStrictEqual(fileRelation, liveRelation)) {
+    if (
+      !fileRelation ||
+      !liveRelation ||
+      isDeepStrictEqual(
+        canonicalRelation(collectionName, fileRelation),
+        canonicalRelation(collectionName, liveRelation),
+      )
+    ) {
       continue;
     }
 
@@ -232,41 +244,6 @@ function compareUniqueConstraints(
         message: `${collectionName}: live has extra unique constraint (${liveConstraint.join(", ")})`,
         resolution: resolutionFor("only_in_live", direction),
         liveValue: liveConstraint,
-      });
-    }
-  }
-}
-
-function compareManyToManyRelations(
-  fileRelations: string[],
-  liveRelations: string[],
-  direction: DiffDirection,
-  changes: SchemaDiffChange[],
-): void {
-  const fileSet = new Set(fileRelations);
-  const liveSet = new Set(liveRelations);
-
-  for (const relation of Array.from(new Set([...fileRelations, ...liveRelations])).sort((left, right) => left.localeCompare(right))) {
-    if (fileSet.has(relation) && !liveSet.has(relation)) {
-      changes.push({
-        scope: "many_to_many_relation",
-        name: relation,
-        status: "only_in_file",
-        message: `file declares many-to-many relation "${relation}" (not in live)`,
-        resolution: resolutionFor("only_in_file", direction),
-        fileValue: relation,
-      });
-      continue;
-    }
-
-    if (!fileSet.has(relation) && liveSet.has(relation)) {
-      changes.push({
-        scope: "many_to_many_relation",
-        name: relation,
-        status: "only_in_live",
-        message: `live has many-to-many relation "${relation}" (not in file)`,
-        resolution: resolutionFor("only_in_live", direction),
-        liveValue: relation,
       });
     }
   }
