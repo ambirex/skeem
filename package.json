@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @skeems/types && npm run build -w @skeems/directus && npm run build -w @skeems/pocketbase && npm run build -w @skeems/nocodb && npm run build -w @skeems/strapi && npm run build -w @skeems/wikidata && npm run build -w @skeems/musicbrainz && npm run build -w @skeems/osm && npm run build -w @skeems/openlibrary && npm run build -w @skeems/crossref && npm run build -w skeem",
+    "build": "npm run build -w @skeems/types && npm run build -w @skeems/directus && npm run build -w @skeems/pocketbase && npm run build -w @skeems/nocodb && npm run build -w @skeems/strapi && npm run build -w @skeems/wikidata && npm run build -w @skeems/musicbrainz && npm run build -w @skeems/osm && npm run build -w @skeems/openlibrary && npm run build -w @skeems/crossref && npm run build -w @skeems/tmdb && npm run build -w skeem",
     "dev": "npm run dev --workspace skeem",
     "eval:run": "npm run build && node ./test/evals/run.mjs",
     "eval:nano-gpt:models": "node ./test/evals/providers/nano-gpt-models.mjs",
@@ -20,6 +20,7 @@
     "smoke:osm": "npm run build && node ./test/smoke/osm.mjs",
     "smoke:openlibrary": "npm run build && node ./test/smoke/openlibrary.mjs",
     "smoke:crossref": "npm run build && node ./test/smoke/crossref.mjs",
+    "smoke:tmdb": "npm run build && node ./test/smoke/tmdb.mjs",
     "conformance": "npm run build && node ./test/conformance/run.mjs",
     "conformance:directus": "npm run build && node ./test/conformance/run.mjs --adapter directus",
     "conformance:pocketbase": "npm run build && node ./test/conformance/run.mjs --adapter pocketbase",

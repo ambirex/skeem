@@ -57,6 +57,7 @@
     "@skeems/osm": "0.5.0",
     "@skeems/pocketbase": "0.5.0",
     "@skeems/strapi": "0.5.0",
+    "@skeems/tmdb": "0.5.0",
     "@skeems/types": "0.5.0",
     "@skeems/wikidata": "0.5.0",
     "yaml": "^2.8.1"

@@ -18,6 +18,7 @@ const REGISTRY: Record<string, () => Promise<AdapterFactory>> = {
   osm: async () => (await import("@skeems/osm")).createOsmAdapter,
   openlibrary: async () => (await import("@skeems/openlibrary")).createOpenLibraryAdapter,
   crossref: async () => (await import("@skeems/crossref")).createCrossRefAdapter,
+  tmdb: async () => (await import("@skeems/tmdb")).createTmdbAdapter,
 };
 
 export function knownAdapters(): string[] {

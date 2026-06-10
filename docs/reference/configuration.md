@@ -77,6 +77,7 @@ extra keys differ:
 | `osm` | `@skeems/osm` | Read | `url` (default `https://api.openstreetmap.org`), `searchUrl` (default `https://nominatim.openstreetmap.org`; self-host for batch); no auth (~1 req/s etiquette) |
 | `openlibrary` | `@skeems/openlibrary` | Read | `url` (default `https://openlibrary.org`); no auth |
 | `crossref` | `@skeems/crossref` | Read | `url` (default `https://api.crossref.org`), `mailto` (optional; joins the polite pool); no key |
+| `tmdb` | `@skeems/tmdb` | Read | `url` (default `https://api.themoviedb.org/3`), `token` (v4 Read Access Token or v3 key — required), `language` (optional) |
 
 ```yaml
 # PocketBase via email/password

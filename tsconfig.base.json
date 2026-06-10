@@ -34,6 +34,9 @@
       ],
       "@skeems/crossref": [
         "packages/skeem-crossref/src/index.ts"
+      ],
+      "@skeems/tmdb": [
+        "packages/skeem-tmdb/src/index.ts"
       ]
     },
     "strict": true,

@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **TMDB adapter** (`@skeems/tmdb`), read tier: `movies`, `tv`, `people` keyed
+  by TMDB id. The only read-tier adapter requiring auth — one
+  `connection.token` covers both schemes (v4 Read Access Token → Bearer; v3
+  32-hex key → `api_key` param). `get` appends `external_ids` (`imdb`,
+  `wikidata`, `tvdb`, socials); `find` searches by title/name (page-based:
+  limit ≤ 20, no offset) and **reverse-resolves IMDb/Wikidata ids** via
+  TMDB's `/find`. TMDB status codes map to skeem errors (34 → NOT_FOUND,
+  7/10 → AUTH with a which-token hint). Live smoke self-skips without
+  `TMDB_API_KEY`: `npm run smoke:tmdb`.
+
 - **CrossRef adapter** (`@skeems/crossref`), read tier: a `works` collection
   keyed by lowercase DOI (URL/`doi:` prefixes stripped; path-encoded so legacy
   SICI DOIs with `<>;#?` work). `get` surfaces authors with bare ORCIDs and an
