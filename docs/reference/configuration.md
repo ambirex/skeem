@@ -75,6 +75,7 @@ extra keys differ:
 | `wikidata` | `@skeems/wikidata` | Read | `url` (default `https://www.wikidata.org`), `language` (default `en`); no auth |
 | `musicbrainz` | `@skeems/musicbrainz` | Read | `url` (default `https://musicbrainz.org`); no auth (client enforces ~1 req/s etiquette) |
 | `osm` | `@skeems/osm` | Read | `url` (default `https://api.openstreetmap.org`), `searchUrl` (default `https://nominatim.openstreetmap.org`; self-host for batch); no auth (~1 req/s etiquette) |
+| `openlibrary` | `@skeems/openlibrary` | Read | `url` (default `https://openlibrary.org`); no auth |
 
 ```yaml
 # PocketBase via email/password

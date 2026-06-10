@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Open Library adapter** (`@skeems/openlibrary`), read tier: `works`,
+  `editions`, `authors` keyed by bare OL ids (path prefixes stripped). Authors'
+  `remote_ids` and editions' ISBN/OCLC/LCCN/`identifiers` surface in the shared
+  `externalIds` vocabulary; `find editions --where isbn=…` resolves via
+  `/isbn/{isbn}.json` (ISBNs normalized, including left-padding leading zeros
+  the CLI's number coercion eats); merged records (`/type/redirect`) are
+  followed one hop. Live smoke: `npm run smoke:openlibrary`.
+
 - **OpenStreetMap adapter** (`@skeems/osm`), read tier: one `elements`
   collection keyed by type-prefixed ids (`way/5013364`) — OSM ids collide across
   node/way/relation and Nominatim cannot filter by type, so the id carries the

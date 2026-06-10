@@ -28,6 +28,9 @@
       ],
       "@skeems/osm": [
         "packages/skeem-osm/src/index.ts"
+      ],
+      "@skeems/openlibrary": [
+        "packages/skeem-openlibrary/src/index.ts"
       ]
     },
     "strict": true,
