@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the JSON envelope contract, discovery-first workflow, relation grammar, and
   coordination primitives.
 
+### CI
+
+- New `smoke.yml` workflow runs the end-to-end suites on pushes to `main` and on
+  demand: the Directus deep smoke gates; the cross-adapter conformance suite
+  (Directus, PocketBase, NocoDB) runs informationally until each fixture is
+  validated. The existing `ci.yml` (build, typecheck, unit tests, pack guard)
+  still runs on every push/PR.
+
 ## [0.5.0] - 2026-06-10
 
 ### Added

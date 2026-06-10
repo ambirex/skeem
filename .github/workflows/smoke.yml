@@ -1,0 +1,49 @@
+name: Smoke
+
+# End-to-end suites against real backends. These are slower than the unit/build
+# checks in ci.yml (they install/boot a backend), so they run on pushes to main
+# and on demand rather than on every PR. Trigger manually from the Actions tab,
+# or add `pull_request:` here once you want them gating PRs too.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  directus-smoke:
+    name: Directus deep smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # The mature, battle-tested suite (test/smoke/directus-ls.mjs). It
+      # self-provisions Directus via npx, so no Docker/service container is needed.
+      - run: npm run smoke:directus
+
+  conformance:
+    name: Conformance (${{ matrix.adapter }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # The cross-adapter contract suite plus the PocketBase/NocoDB fixtures are
+    # newer than the Directus deep smoke. They run here for signal but are not
+    # yet gating — flip continue-on-error to false per adapter once you've seen a
+    # green run locally (`npm run conformance:<adapter>`). Strapi is data-tier and
+    # needs a user-provided instance, so it is excluded from CI.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        adapter: [directus, pocketbase, nocodb]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run conformance:${{ matrix.adapter }}

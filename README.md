@@ -148,8 +148,13 @@ skeem/
 ```bash
 npm run build
 npm run test
-npm run smoke:directus
+npm run smoke:directus          # deep Directus end-to-end suite
+npm run conformance:directus    # cross-adapter contract suite (also :pocketbase, :nocodb)
 ```
+
+CI runs build, typecheck, unit tests, and a package-content guard on every push
+([ci.yml](.github/workflows/ci.yml)); the end-to-end smoke and conformance suites
+run on pushes to `main` and on demand ([smoke.yml](.github/workflows/smoke.yml)).
 
 Helpful entry points:
 
