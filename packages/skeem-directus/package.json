@@ -1,6 +1,6 @@
 {
   "name": "@skeems/directus",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Directus adapter for the skeem CLI.",
   "license": "MIT",
   "author": "Brent Doll <brent.doll@gmail.com>",
@@ -38,6 +38,9 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@skeems/types": "0.2.0"
   },
   "scripts": {
     "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",

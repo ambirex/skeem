@@ -1,0 +1,47 @@
+{
+  "name": "@skeems/types",
+  "version": "0.2.0",
+  "description": "Shared types for the skeem CLI and its backend adapters.",
+  "license": "MIT",
+  "author": "Brent Doll <brent.doll@gmail.com>",
+  "homepage": "https://github.com/ambirex/skeem#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ambirex/skeem.git",
+    "directory": "packages/skeem-types"
+  },
+  "bugs": {
+    "url": "https://github.com/ambirex/skeem/issues"
+  },
+  "keywords": [
+    "skeem",
+    "types",
+    "adapter",
+    "headless",
+    "schema"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run build"
+  }
+}

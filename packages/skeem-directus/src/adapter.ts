@@ -1,3 +1,4 @@
+import type { SkemAdapter } from "@skeems/types";
 import { DirectusClient } from "./client.js";
 import type {
   AdapterConfig,
@@ -23,7 +24,7 @@ interface ItemsResponse<T> {
   };
 }
 
-export function createDirectusAdapter() {
+export function createDirectusAdapter(): SkemAdapter {
   const client = new DirectusClient();
 
   return {

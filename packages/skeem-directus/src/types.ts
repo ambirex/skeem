@@ -1,92 +1,21 @@
-export type FieldType =
-  | "string"
-  | "text"
-  | "integer"
-  | "float"
-  | "boolean"
-  | "datetime"
-  | "date"
-  | "json"
-  | "uuid"
-  | "csv";
+// Shared data model and input shapes come from @skeems/types. They are
+// re-exported so the rest of this package keeps importing from "./types.js".
+export type {
+  AdapterConfig,
+  Collection,
+  Field,
+  FieldType,
+  FindOptions,
+  GetOptions,
+  Relation,
+  Schema,
+  SchemaCollectionInput,
+  SchemaFieldInput,
+  SchemaRelationInput,
+  UniqueConstraint,
+} from "@skeems/types";
 
-export interface Field {
-  name: string;
-  type: FieldType;
-  required: boolean;
-  unique: boolean;
-  default?: unknown;
-  enum?: string[];
-}
-
-export interface Relation {
-  type: "m2o" | "o2m" | "m2m";
-  field: string;
-  relatedCollection: string;
-  relatedField: string;
-  junctionCollection?: string;
-  junctionLocalField?: string;
-  junctionForeignField?: string;
-}
-
-export interface UniqueConstraint {
-  fields: string[];
-}
-
-export interface Collection {
-  name: string;
-  primaryKey: string;
-  fields: Map<string, Field>;
-  relations: Relation[];
-  uniqueConstraints: UniqueConstraint[];
-  isJunction?: boolean;
-}
-
-export interface Schema {
-  collections: Map<string, Collection>;
-}
-
-export interface AdapterConfig {
-  url: string;
-  token?: string;
-}
-
-export interface SchemaFieldInput {
-  name: string;
-  type: FieldType;
-  required?: boolean;
-  unique?: boolean;
-  default?: unknown;
-  enum?: string[];
-  clearDefault?: boolean;
-}
-
-export interface SchemaCollectionInput {
-  name: string;
-  fields: SchemaFieldInput[];
-}
-
-export interface SchemaRelationInput {
-  collection: string;
-  field: string;
-  relatedCollection: string;
-  type: Relation["type"];
-  inverseField?: string;
-  junctionCollection?: string;
-  junctionField?: string;
-  inverseJunctionField?: string;
-}
-
-export interface FindOptions {
-  limit?: number;
-  offset?: number;
-  sort?: string;
-  expand?: string[];
-}
-
-export interface GetOptions {
-  expand?: string[];
-}
+// Directus-specific row shapes returned by the Directus API.
 
 export interface DirectusCollectionRow {
   collection: string;

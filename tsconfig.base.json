@@ -5,6 +5,9 @@
     "moduleResolution": "NodeNext",
     "baseUrl": ".",
     "paths": {
+      "@skeems/types": [
+        "packages/skeem-types/src/index.ts"
+      ],
       "@skeems/directus": [
         "packages/skeem-directus/src/index.ts"
       ]
