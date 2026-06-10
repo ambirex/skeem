@@ -39,6 +39,28 @@ skeem cache clear
 
 Use discovery commands to inspect the live backend before acting.
 
+## Agent Tooling
+
+```bash
+skeem tools --format openai > tools.json
+skeem tools --format anthropic > tools.json
+skeem tools --format openai --collections people,companies
+skeem tools --format openai --include-schema    # also emit discover/define tools
+skeem tools --format openai -o tools.json        # write the bare array to a file
+```
+
+`tools` generates LLM tool definitions from the live schema (spec Part VI §27).
+Each collection yields `skeem_create_*`, `skeem_find_*`, `skeem_get_*`,
+`skeem_update_*`, and `skeem_delete_*` tools, with parameter schemas derived from
+field types, required flags, enums, and relations. Relation parameters document
+the `?`/`??` resolution grammar so a model can pass an id, `?field=value` to
+resolve, or `??field=value` to resolve-or-create.
+
+Without `-o`, the command returns the standard envelope with the tool array under
+`data.tools`. With `-o <path>` it writes the bare array to the file (directly
+loadable by an LLM SDK) and still returns the envelope on stdout — mirroring
+`discover -o`.
+
 ## Data Reads
 
 ```bash

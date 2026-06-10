@@ -19,6 +19,7 @@ const BOOLEAN_FLAGS = new Set([
   "no-rollback",
   "counts",
   "allow-destructive",
+  "include-schema",
 ]);
 // "status" is intentionally NOT a boolean flag: it is a common field name
 // (e.g. an enum). It parses as a boolean when standalone (`init --status`)
@@ -81,6 +82,26 @@ export async function runCli(argv: string[]): Promise<void> {
           await runtime.discover({
             collections: rest,
             outputPath: parsed.flags.get("output")?.at(-1),
+          }),
+          { json },
+        );
+        return;
+      }
+      case "tools": {
+        const format = parsed.flags.get("format")?.at(-1);
+        if (format !== "openai" && format !== "anthropic") {
+          throw new UsageError("Usage: skeem tools --format <openai|anthropic> [--collections a,b] [--include-schema] [-o file]");
+        }
+        const collectionsFlag = parsed.flags.get("collections")?.at(-1);
+        const outputPath = parsed.flags.get("output")?.at(-1);
+        writeEnvelope(
+          await runtime.tools({
+            format,
+            collections: collectionsFlag
+              ? collectionsFlag.split(",").map((name) => name.trim()).filter(Boolean)
+              : [],
+            includeSchema: parsed.booleans.has("include-schema"),
+            ...(outputPath ? { outputPath } : {}),
           }),
           { json },
         );
@@ -443,6 +464,7 @@ function helpText(): string {
     "  skeem ls [--counts]",
     "  skeem describe <collection>",
     "  skeem discover [collection ...] [-o path]",
+    "  skeem tools --format <openai|anthropic> [--collections a,b] [--include-schema] [-o path]",
     "  skeem diff <schema-file> [--direction define|discover]",
     "  skeem define <schema-file> [--dry-run] [--yes] [--allow-destructive]",
     "  skeem init [--status]",

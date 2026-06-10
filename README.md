@@ -2,20 +2,23 @@
 
 Relational-aware CLI for headless backends, built for AI agents.
 
-`skeem` gives agents and developers a compact, schema-aware way to inspect data, perform relational writes, manage schema drift, and coordinate multi-step work against a headless backend. The current implementation is Directus-first and smoke-tested end to end against a local Directus fixture.
+`skeem` gives agents and developers a compact, schema-aware way to inspect data, perform relational writes, manage schema drift, and coordinate multi-step work against a headless backend. The core is backend-agnostic; backends are pluggable adapters.
+
+**Agents:** start with [SKILL.md](SKILL.md) (the playbook) and [llms.txt](llms.txt) (the map). Or run `skeem tools --format anthropic|openai` to generate tool definitions from your live schema.
 
 ## Status
 
-`skeem` 0.2.x is published to npm: run it with `npx skeem` or install it globally. Node 20+ is required.
+`skeem` 0.5.x is published to npm: run it with `npx skeem` or install it globally. Node 20+ is required.
 
-- Directus adapter with schema introspection
+- Adapters: **Directus**, **PocketBase**, **NocoDB** (full-tier) and **Strapi** (data-tier)
 - Discovery, CRUD, upsert, link, unlink, and compound `exec`
 - Relation-aware writes with dot notation plus `@`, `?`, and `??`
 - Schema `discover`, `diff`, and `define`, including m2o/m2m relations and enum fields
+- `skeem tools` generates OpenAI/Anthropic tool definitions from the live schema
 - System features for aliases, provenance, versions, trash, claims, annotations, and idempotency
 - Stable JSON envelopes designed for agent callers
 
-The next roadmap item is extension registry groundwork. See [docs/next-slices.md](docs/next-slices.md).
+See [docs/adapter-roadmap.md](docs/adapter-roadmap.md) for shipped and candidate adapters, and [docs/next-slices.md](docs/next-slices.md) for upcoming work.
 
 ## Why Agents Use It
 
@@ -23,7 +26,8 @@ The next roadmap item is extension registry groundwork. See [docs/next-slices.md
 - Compact relational grammar: agents can create or resolve related records without hand-building multiple API calls.
 - Schema-aware discovery: `ls`, `describe`, and `discover` let an agent inspect the backend before acting.
 - Predictable output: every command can return a stable JSON envelope with `--json`.
-- Backend abstraction: core behavior lives in `packages/skeem`; the current adapter targets Directus.
+- Backend abstraction: core behavior lives in `packages/skeem`; adapters (Directus, PocketBase, NocoDB, Strapi) are swapped via the `adapter` config field.
+- Self-describing: `skeem tools` emits LLM tool definitions from the live schema, and [SKILL.md](SKILL.md) teaches the envelope + relation grammar.
 
 ## Where It Fits
 
@@ -107,6 +111,8 @@ skeem init --json
 
 ## Docs
 
+- [SKILL.md](SKILL.md) — agent playbook (envelope contract, relation grammar, workflow)
+- [llms.txt](llms.txt) — curated map of the repo for LLMs
 - [Docs Index](docs/README.md)
 - [Getting Started](docs/guides/getting-started.md)
 - [Agent Workflows](docs/guides/agent-workflows.md)
@@ -124,9 +130,15 @@ skeem init --json
 skeem/
 ├── packages/
 │   ├── skeem/            # CLI + core runtime
-│   └── skeem-directus/   # Directus adapter
+│   ├── skeem-types/      # shared types + adapter contract
+│   ├── skeem-directus/   # Directus adapter (full)
+│   ├── skeem-pocketbase/ # PocketBase adapter (full)
+│   ├── skeem-nocodb/     # NocoDB adapter (full)
+│   └── skeem-strapi/     # Strapi adapter (data tier)
 ├── docs/                 # Guides, references, architecture notes, full spec
-├── test/                 # Smoke harness and fixtures
+├── test/                 # Smoke + conformance harness and fixtures
+├── SKILL.md              # Agent playbook
+├── llms.txt              # LLM-oriented repo map
 ├── AGENTS.md             # Codex / agent guidance
 └── CLAUDE.md             # Claude-specific wrapper guidance
 ```

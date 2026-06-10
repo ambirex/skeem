@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`skeem tools --format openai|anthropic`** generates LLM tool definitions from
+  the live schema (spec Part VI §27): create/find/get/update/delete tools per
+  collection, with parameter schemas derived from field types, required flags,
+  enums, and relations (relation params document the `?`/`??` grammar). Supports
+  `--collections a,b`, `--include-schema` (adds discover/define tools), and `-o`
+  (writes the bare array for direct SDK use; stdout keeps the envelope).
+- **`SKILL.md`** (agent playbook) and **`llms.txt`** (curated repo map) teaching
+  the JSON envelope contract, discovery-first workflow, relation grammar, and
+  coordination primitives.
+
 ## [0.5.0] - 2026-06-10
 
 ### Added

@@ -18,6 +18,7 @@ import { AdapterError } from "../types/index.js";
 import { loadConfig } from "../config/load-config.js";
 import { requireCollection, resolveCollectionName, resolveExpandPaths, resolveRelation, filterCollections } from "./schema.js";
 import { describeCollection, schemaToDocument } from "../schema/serialization.js";
+import { generateToolDefinitions, type ToolFormat } from "../agent/tools.js";
 import { loadSchemaDocument } from "../schema/document.js";
 import { diffSchemaDocuments } from "../schema/diff.js";
 import { buildDefinePlan } from "../schema/plan.js";
@@ -187,6 +188,45 @@ export class SkeemRuntime {
     return toSuccessEnvelope({
       operation: "discover",
       data: document,
+    });
+  }
+
+  async tools(options: {
+    format: ToolFormat;
+    collections: string[];
+    includeSchema: boolean;
+    outputPath?: string;
+  }): Promise<SuccessEnvelope> {
+    const schema = await this.loadLiveSchema();
+    const available = filterCollections(schema, this.config);
+    const selectedNames = options.collections.length > 0
+      ? options.collections.map((input) => this.resolveCollection(schema, input).name)
+      : available.map((collection) => collection.name);
+    const dedupedSelectedNames = Array.from(new Set(selectedNames));
+    const selectedCollections = dedupedSelectedNames.map((name) => this.resolveCollection(schema, name));
+
+    const tools = generateToolDefinitions(selectedCollections, {
+      format: options.format,
+      includeSchema: options.includeSchema,
+    });
+
+    if (options.outputPath) {
+      const absolutePath = path.resolve(this.config.rootDir, options.outputPath);
+      await mkdir(path.dirname(absolutePath), { recursive: true });
+      // Write the bare tool array so the file is directly loadable by an LLM SDK.
+      await writeFile(absolutePath, `${JSON.stringify(tools, null, 2)}\n`);
+
+      return toSuccessEnvelope({
+        operation: "tools",
+        data: { path: absolutePath, format: options.format, tools },
+        count: tools.length,
+      });
+    }
+
+    return toSuccessEnvelope({
+      operation: "tools",
+      data: { format: options.format, tools },
+      count: tools.length,
     });
   }
 

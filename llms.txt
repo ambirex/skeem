@@ -1,0 +1,27 @@
+# skeem
+
+> Relational-aware CLI for headless backends (Directus, PocketBase, NocoDB, Strapi), built for AI agents. One schema-aware command replaces several raw API calls, and every command returns a stable JSON envelope under `--json`.
+
+How to drive skeem well:
+- Always pass `--json` and parse the envelope: `{ "ok": true, "operation", "data", "count" }`, or `{ "ok": false, "error": { "code", "message" } }`. Branch on `ok` then `error.code` (NOT_FOUND, DUPLICATE, VALIDATION, AUTH, RELATION_NOT_FOUND, AMBIGUOUS, SCHEMA_UNSUPPORTED, USAGE, ERROR), never on message text. Exit code is 0 on success, 1 on failure.
+- Discover before writing: `skeem ls --counts`, `skeem describe <collection>`, `skeem discover` reveal exact field names, required/enum fields, and relations.
+- Relation grammar on write values: `42` (scalar/fk id), `@42` (link by id), `?field=value` (resolve existing), `??field=value` (resolve-or-create), `child.field` (nested inline). Prefer `?`/`??` over manual find-then-create.
+- `skeem tools --format anthropic|openai` generates typed tool definitions from the live schema.
+- Coordination primitives keep multi-step writes safe: `--idempotency-key`, `claim`/`claims`/`release`, soft-delete + `restore`, provenance/versions (`skeem init` provisions the system tables).
+
+## Start here
+- [SKILL.md](SKILL.md): the agent playbook — envelope contract, discovery-first workflow, relation grammar, coordination primitives, and the `skeem tools` generator.
+- [README.md](README.md): overview, install, quickstart, and where skeem fits versus raw SDK calls and MCP servers.
+
+## Reference
+- [CLI Reference](docs/reference/cli.md): every command, flag, and the output/exit-code contract.
+- [Configuration Reference](docs/reference/configuration.md): `.skeemrc.yaml`, profiles, and per-adapter connection/auth.
+- [Schema Management](docs/reference/schema-management.md): `discover`, `diff`, and `define` (relations and enums).
+- [System Features](docs/reference/system-features.md): claims, provenance, versions, trash, annotations, aliases, idempotency.
+
+## Adapters
+- [Adapter Roadmap](docs/adapter-roadmap.md): shipped adapters (Directus, PocketBase, NocoDB full-tier; Strapi data-tier) and what each supports.
+
+## Deeper
+- [Architecture Overview](docs/architecture/overview.md): introspect → serialize → diff → plan → apply, and the adapter contract.
+- [Full Product Spec](docs/spec/full-spec.md): the complete original design, including Part VI (agent integration).
