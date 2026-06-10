@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-10
+
+### Added
+
+- **PocketBase adapter** (`@skeems/pocketbase`): full-tier support for PocketBase
+  v0.23+ — discovery, CRUD, schema mutation (`define` + enum fields), system
+  features (`init`, `claim`). Auth via token or `email`/`password` in
+  `.skeemrc.yaml`. m2m relations are introspected read-only; m2m writes surface
+  a clear capability error.
+- Adapter registry in core (`packages/skeem/src/core/adapters.ts`) now lazy-loads
+  `pocketbase` alongside `directus`; `config.adapter: pocketbase` is live.
+- Cross-adapter conformance harness (`test/conformance/`) now includes a
+  PocketBase fixture runnable via `npm run conformance:pocketbase`.
+
+### Changed
+
+- All packages bumped to `0.3.0` lockstep
+  (publish order: types → directus → pocketbase → cli).
+
 ## [0.2.0] - 2026-06-10
 
 ### Added

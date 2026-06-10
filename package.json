@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @skeems/types && npm run build -w @skeems/directus && npm run build -w skeem",
+    "build": "npm run build -w @skeems/types && npm run build -w @skeems/directus && npm run build -w @skeems/pocketbase && npm run build -w skeem",
     "dev": "npm run dev --workspace skeem",
     "eval:run": "npm run build && node ./test/evals/run.mjs",
     "eval:nano-gpt:models": "node ./test/evals/providers/nano-gpt-models.mjs",
@@ -17,6 +17,7 @@
     "smoke:directus:ls": "npm run build && node ./test/smoke/directus-ls.mjs",
     "conformance": "npm run build && node ./test/conformance/run.mjs",
     "conformance:directus": "npm run build && node ./test/conformance/run.mjs --adapter directus",
+    "conformance:pocketbase": "npm run build && node ./test/conformance/run.mjs --adapter pocketbase",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },

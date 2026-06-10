@@ -10,6 +10,9 @@
       ],
       "@skeems/directus": [
         "packages/skeem-directus/src/index.ts"
+      ],
+      "@skeems/pocketbase": [
+        "packages/skeem-pocketbase/src/index.ts"
       ]
     },
     "strict": true,
