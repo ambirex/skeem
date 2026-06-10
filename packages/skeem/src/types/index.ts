@@ -80,7 +80,6 @@ export interface SkemAdapter {
   create(collection: string, data: Record<string, unknown>): Promise<EntityRecord>;
   get(collection: string, id: PrimaryKey, options?: GetOptions): Promise<EntityRecord>;
   find(collection: string, filter: Filter, options?: FindOptions): Promise<EntityRecord[]>;
-  findOne(collection: string, filter: Filter): Promise<EntityRecord>;
   update(collection: string, id: PrimaryKey, data: Record<string, unknown>): Promise<EntityRecord>;
   delete(collection: string, id: PrimaryKey): Promise<void>;
   count?(collection: string): Promise<number | null>;

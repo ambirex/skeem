@@ -80,9 +80,16 @@ export function createDirectusAdapter() {
       const relationRows = relationsResponse.data;
       const relationByCollectionField = new Map(relationRows.map((row) => [relationKey(row.collection, row.field), row]));
 
+      // Snapshot known collection names after field processing so the relation
+      // loop doesn't create ghost entries for collections that only appear in
+      // relation metadata (e.g. orphaned junction references).
+      const knownCollections = new Set(collections.keys());
+
       for (const row of relationRows) {
-        const collection = collections.get(row.collection) ?? createCollection(row.collection);
-        collections.set(collection.name, collection);
+        if (!knownCollections.has(row.collection)) {
+          continue;
+        }
+        const collection = collections.get(row.collection)!;
 
         if (isManyToManyHalf(row)) {
           collection.isJunction = true;
@@ -91,8 +98,10 @@ export function createDirectusAdapter() {
             continue;
           }
 
-          const ownerCollection = collections.get(row.related_collection) ?? createCollection(row.related_collection);
-          collections.set(ownerCollection.name, ownerCollection);
+          const ownerCollection = collections.get(row.related_collection);
+          if (!ownerCollection) {
+            continue;
+          }
 
           const m2mRelation: Relation = {
             type: "m2m",
@@ -358,7 +367,6 @@ function toDirectusFieldPayload(
       is_unique: field.unique === true,
       ...(mapped.maxLength !== undefined ? { max_length: mapped.maxLength } : {}),
       ...((hasDefault || field.clearDefault) ? { default_value: hasDefault ? field.default : null } : {}),
-      ...((options?.forUpdate && !hasDefault && !field.clearDefault) ? {} : {}),
     },
   };
 }

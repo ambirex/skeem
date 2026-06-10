@@ -114,21 +114,8 @@ export class SkeemRuntime {
 
   static async create(cwd: string, cli: CliGlobalOptions): Promise<SkeemRuntime> {
     const config = await loadConfig(cwd, cli);
-    const rawAdapter = createDirectusAdapter();
-    await rawAdapter.connect(config.connection);
-    const adapter: SkemAdapter = {
-      ...rawAdapter,
-      async findOne(collection, filter) {
-        const rows = await rawAdapter.find(collection, filter, { limit: 2 });
-        if (rows.length === 0) {
-          throw new NotFoundError(collection, undefined, filter);
-        }
-        if (rows.length > 1) {
-          throw new AmbiguousError(collection, filter, rows.length);
-        }
-        return rows[0]!;
-      },
-    };
+    const adapter = createDirectusAdapter();
+    await adapter.connect(config.connection);
     const cache = new SchemaCache(config.rootDir, config.cache.ttlMs);
     return new SkeemRuntime(config, adapter, cache);
   }
@@ -1467,7 +1454,7 @@ export class SkeemRuntime {
             break;
           }
           case "findOne": {
-            result = await this.adapter.findOne(collection, (resolved.filter ?? {}) as Filter);
+            result = await this.findOne(collection, (resolved.filter ?? {}) as Filter);
             break;
           }
           case "update": {
@@ -2851,6 +2838,17 @@ export class SkeemRuntime {
       return fallback;
     }
     throw new ValidationError(collection.name, collection.primaryKey, `Response for "${collection.name}" did not include a primary key.`);
+  }
+
+  private async findOne(collection: string, filter: Filter): Promise<EntityRecord> {
+    const rows = await this.adapter.find(collection, filter, { limit: 2 });
+    if (rows.length === 0) {
+      throw new NotFoundError(collection, undefined, filter);
+    }
+    if (rows.length > 1) {
+      throw new AmbiguousError(collection, filter, rows.length);
+    }
+    return rows[0]!;
   }
 
   private async rollback(created: CreatedRecordRef[]): Promise<void> {
