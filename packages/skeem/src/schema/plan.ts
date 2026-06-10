@@ -340,16 +340,6 @@ function classifyFieldUpdate(
     };
   }
 
-  const fileHasEnum = Array.isArray(fileField.enum) && fileField.enum.length > 0;
-  const liveHasEnum = Array.isArray(liveField.enum) && liveField.enum.length > 0;
-  if (fileHasEnum || liveHasEnum) {
-    return {
-      executable: false,
-      destructive: false,
-      reason: "Enum schema updates are not executable yet.",
-    };
-  }
-
   const liveHasDefault = Object.prototype.hasOwnProperty.call(liveField, "default");
   const fileHasDefault = Object.prototype.hasOwnProperty.call(fileField, "default");
 

@@ -19,8 +19,10 @@ const BOOLEAN_FLAGS = new Set([
   "no-rollback",
   "counts",
   "allow-destructive",
-  "status",
 ]);
+// "status" is intentionally NOT a boolean flag: it is a common field name
+// (e.g. an enum). It parses as a boolean when standalone (`init --status`)
+// and as a value flag when given a value (`create x --status published`).
 
 const SHORT_FLAGS: Record<string, string> = {
   y: "yes",

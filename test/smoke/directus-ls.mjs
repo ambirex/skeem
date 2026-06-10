@@ -202,6 +202,10 @@ try {
     type: "string",
     unique: true,
   };
+  defineInput.collections.widgets.fields.status = {
+    type: "string",
+    enum: ["draft", "published"],
+  };
   defineInput.collections.widgets.relations = {
     ...(defineInput.collections.widgets.relations ?? {}),
     project_id: {
@@ -243,6 +247,7 @@ try {
   expectPlanAction(defineDryRun, { action: "create_field", collection: "widgets", field: "description" });
   expectPlanAction(defineDryRun, { action: "create_field", collection: "widgets", field: "project_id" });
   expectPlanAction(defineDryRun, { action: "create_field", collection: "widgets", field: "slug" });
+  expectPlanAction(defineDryRun, { action: "create_field", collection: "widgets", field: "status" });
   expectPlanAction(defineDryRun, { action: "create_collection", collection: "labels" });
   expectPlanAction(defineDryRun, { action: "create_relation", collection: "widgets", field: "project_id" });
   expectPlanAction(defineDryRun, { action: "create_many_to_many_relation" });
@@ -251,7 +256,7 @@ try {
   if (!defineApply.ok || defineApply.operation !== "define" || defineApply.action !== "define") {
     throw new Error(`Define apply failed:\n${JSON.stringify(defineApply, null, 2)}`);
   }
-  if (defineApply.data?.summary?.applied !== 7 || defineApply.data?.summary?.skipped !== 0) {
+  if (defineApply.data?.summary?.applied !== 8 || defineApply.data?.summary?.skipped !== 0) {
     throw new Error(`Define apply summary was unexpected:\n${JSON.stringify(defineApply, null, 2)}`);
   }
 
@@ -264,6 +269,10 @@ try {
   const widgetsToLabels = discoveredAfterDefine.data?.collections?.widgets?.relations?.labels;
   if (!discoveredAfterDefine.ok || widgetsToLabels?.type !== "m2m" || widgetsToLabels?.collection !== "labels") {
     throw new Error(`Discover should surface the new many-to-many relation:\n${JSON.stringify(discoveredAfterDefine, null, 2)}`);
+  }
+  const statusEnum = discoveredAfterDefine.data?.collections?.widgets?.fields?.status?.enum;
+  if (!Array.isArray(statusEnum) || [...statusEnum].sort().join(",") !== "draft,published") {
+    throw new Error(`Discover should surface the enum field choices:\n${JSON.stringify(discoveredAfterDefine, null, 2)}`);
   }
 
   const lsAfterDefine = await runSkeemJson(["ls"]);
@@ -298,6 +307,16 @@ try {
     !initApply.data.applied.includes("skeem_annotations")
   ) {
     throw new Error(`Init apply failed:\n${JSON.stringify(initApply, null, 2)}`);
+  }
+
+  // Enum write: a field named "status" must be settable (it collides with the
+  // legacy `init --status` boolean flag if the parser mishandles it).
+  const createdEnum = await runSkeemJson(["create", "widgets", "--name", "Enum Widget", "--status", "published"]);
+  if (!createdEnum.ok || createdEnum.data?.status !== "published") {
+    throw new Error(`Create with an enum value failed:\n${JSON.stringify(createdEnum, null, 2)}`);
+  }
+  if (typeof createdEnum.data?.id === "number" || typeof createdEnum.data?.id === "string") {
+    await runSkeemJson(["delete", "widgets", String(createdEnum.data.id), "--hard"]);
   }
 
   const initStatusAfter = await runSkeemJson(["init", "--status"]);

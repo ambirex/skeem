@@ -206,6 +206,32 @@ describe("buildDefinePlan", () => {
     });
   });
 
+  test("marks enum choice changes as an executable field update", () => {
+    const liveDocument: SchemaDocument = {
+      name: "live",
+      collections: {
+        articles: {
+          fields: { status: { type: "string", enum: ["draft", "published"] } },
+        },
+      },
+    };
+
+    const fileDocument: SchemaDocument = {
+      name: "file",
+      collections: {
+        articles: {
+          fields: { status: { type: "string", enum: ["draft", "published", "archived"] } },
+        },
+      },
+    };
+
+    const result = buildDefinePlan(fileDocument, liveDocument);
+    const update = result.plan.find((entry) => entry.action === "update_field");
+
+    expect(update?.executable).toBe(true);
+    expect((update?.details?.field as { enum?: string[] })?.enum).toEqual(["draft", "published", "archived"]);
+  });
+
   test("blocks m2m structural changes", () => {
     const liveDocument: SchemaDocument = {
       name: "live",

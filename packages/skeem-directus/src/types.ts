@@ -27,6 +27,9 @@ export interface DirectusFieldRow {
   type?: string | null;
   meta?: {
     special?: string[] | null;
+    options?: {
+      choices?: Array<{ text?: string; value?: string }> | null;
+    } | null;
   } | null;
   schema?: {
     data_type?: string | null;

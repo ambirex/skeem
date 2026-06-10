@@ -59,6 +59,13 @@ export function createDirectusAdapter(): SkemAdapter {
           continue;
         }
 
+        const choices = row.meta?.options?.choices;
+        const enumValues = Array.isArray(choices)
+          ? choices
+            .map((choice) => choice?.value)
+            .filter((value): value is string => typeof value === "string")
+          : [];
+
         const field: Field = {
           name: row.field,
           type: mapFieldType(row.schema?.data_type),
@@ -67,6 +74,7 @@ export function createDirectusAdapter(): SkemAdapter {
           ...(row.schema?.default_value !== undefined && row.schema.default_value !== null
             ? { default: row.schema.default_value }
             : {}),
+          ...(enumValues.length > 0 ? { enum: enumValues } : {}),
         };
 
         collection.fields.set(field.name, field);
@@ -198,17 +206,9 @@ export function createDirectusAdapter(): SkemAdapter {
       await client.delete(`/collections/${collection}`);
     },
     async createField(collection: string, field: SchemaFieldInput): Promise<void> {
-      if (field.type === "string" && field.enum && field.enum.length > 0) {
-        throw new Error(`Directus adapter does not support enum field creation for "${collection}.${field.name}" yet.`);
-      }
-
       await client.post(`/fields/${collection}`, toDirectusFieldPayload(field, collection));
     },
     async updateField(collection: string, fieldName: string, field: SchemaFieldInput): Promise<void> {
-      if (field.type === "string" && field.enum && field.enum.length > 0) {
-        throw new Error(`Directus adapter does not support enum field updates for "${collection}.${fieldName}" yet.`);
-      }
-
       await client.patch(`/fields/${collection}/${fieldName}`, toDirectusFieldPayload(field, collection, { forUpdate: true }));
     },
     async deleteField(collection: string, fieldName: string): Promise<void> {
@@ -289,14 +289,18 @@ function toDirectusFieldPayload(
 ): Record<string, unknown> {
   const mapped = mapSchemaField(field.type);
   const hasDefault = Object.prototype.hasOwnProperty.call(field, "default");
+  const hasEnum = Array.isArray(field.enum) && field.enum.length > 0;
 
   return {
     field: field.name,
     type: mapped.type,
     meta: {
-      interface: mapped.interface,
+      // Directus represents an enum as a dropdown interface over choices;
+      // the underlying column stays the mapped scalar type.
+      interface: hasEnum ? "select-dropdown" : mapped.interface,
       width: "full",
       required: field.required === true,
+      ...(hasEnum ? { options: { choices: field.enum!.map((value) => ({ text: value, value })) } } : {}),
     },
     schema: {
       name: field.name,
