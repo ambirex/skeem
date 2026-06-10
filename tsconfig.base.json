@@ -19,6 +19,9 @@
       ],
       "@skeems/strapi": [
         "packages/skeem-strapi/src/index.ts"
+      ],
+      "@skeems/wikidata": [
+        "packages/skeem-wikidata/src/index.ts"
       ]
     },
     "strict": true,

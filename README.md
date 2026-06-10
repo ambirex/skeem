@@ -10,7 +10,7 @@ Relational-aware CLI for headless backends, built for AI agents.
 
 `skeem` 0.5.x is published to npm: run it with `npx skeem` or install it globally. Node 20+ is required.
 
-- Adapters: **Directus**, **PocketBase**, **NocoDB** (full-tier) and **Strapi** (data-tier)
+- Adapters: **Directus**, **PocketBase**, **NocoDB** (full-tier), **Strapi** (data-tier), and **WikiData** (read-tier)
 - Discovery, CRUD, upsert, link, unlink, and compound `exec`
 - Relation-aware writes with dot notation plus `@`, `?`, and `??`
 - Schema `discover`, `diff`, and `define`, including m2o/m2m relations and enum fields
@@ -26,7 +26,7 @@ See [docs/adapter-roadmap.md](docs/adapter-roadmap.md) for shipped and candidate
 - Compact relational grammar: agents can create or resolve related records without hand-building multiple API calls.
 - Schema-aware discovery: `ls`, `describe`, and `discover` let an agent inspect the backend before acting.
 - Predictable output: every command can return a stable JSON envelope with `--json`.
-- Backend abstraction: core behavior lives in `packages/skeem`; adapters (Directus, PocketBase, NocoDB, Strapi) are swapped via the `adapter` config field.
+- Backend abstraction: core behavior lives in `packages/skeem`; adapters (Directus, PocketBase, NocoDB, Strapi, WikiData) are swapped via the `adapter` config field.
 - Self-describing: `skeem tools` emits LLM tool definitions from the live schema, and [SKILL.md](SKILL.md) teaches the envelope + relation grammar.
 
 ## Where It Fits
@@ -134,7 +134,8 @@ skeem/
 │   ├── skeem-directus/   # Directus adapter (full)
 │   ├── skeem-pocketbase/ # PocketBase adapter (full)
 │   ├── skeem-nocodb/     # NocoDB adapter (full)
-│   └── skeem-strapi/     # Strapi adapter (data tier)
+│   ├── skeem-strapi/     # Strapi adapter (data tier)
+│   └── skeem-wikidata/   # WikiData adapter (read-only)
 ├── docs/                 # Guides, references, architecture notes, full spec
 ├── test/                 # Smoke + conformance harness and fixtures
 ├── SKILL.md              # Agent playbook

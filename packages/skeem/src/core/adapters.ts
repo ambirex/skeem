@@ -13,6 +13,7 @@ const REGISTRY: Record<string, () => Promise<AdapterFactory>> = {
   pocketbase: async () => (await import("@skeems/pocketbase")).createPocketBaseAdapter,
   nocodb: async () => (await import("@skeems/nocodb")).createNocoDbAdapter,
   strapi: async () => (await import("@skeems/strapi")).createStrapiAdapter,
+  wikidata: async () => (await import("@skeems/wikidata")).createWikiDataAdapter,
 };
 
 export function knownAdapters(): string[] {

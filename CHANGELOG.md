@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **WikiData adapter** (`@skeems/wikidata`), a new **read tier**: read-only access
+  to WikiData (or any Wikibase instance) over the public MediaWiki Action API (no
+  auth). Two synthetic collections — `items` (Q-ids) and `properties` (P-ids) —
+  support `ls`/`describe`/`discover`/`get`/`find`; `get` returns an entity with
+  its statements flattened into simplified `claims`, and `find` searches by label.
+  Writes are rejected as read-only. Verified end-to-end by a live smoke
+  (`npm run smoke:wikidata`).
 - **Adapter `link`/`unlink` capability** for m2m record linking on backends with
   no writable junction collection. The `SkemAdapter` contract gains optional
   `link`/`unlink` methods; the core's `link`/`unlink` verbs use them for m2m when

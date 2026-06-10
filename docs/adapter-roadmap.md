@@ -2,7 +2,9 @@
 
 A ranked menu of candidate backend integrations, ordered by how welcome each would be to the people who actually run a tool like skeem: self-hosters, indie hackers, agencies, and agent/automation builders. This is a prioritization menu, not a commitment — adapters carry permanent maintenance cost, and the realistic solo pace is two or three per year. The long tail belongs to community contributors once an adapter authoring guide and conformance kit exist.
 
-**Shipped so far:** Directus (`@skeems/directus`, the original, Full), PocketBase (`@skeems/pocketbase`, Full), NocoDB (`@skeems/nocodb`, Full), and Strapi (`@skeems/strapi`, **Data**). Each is wired into the cross-adapter conformance suite under `test/conformance/` (Strapi runs the data-tier subset against a user-provided instance). That completes the plan's "suggested first three" (plus Strapi); Supabase is the natural next Full-tier target.
+**Shipped so far:** Directus (`@skeems/directus`, the original, Full), PocketBase (`@skeems/pocketbase`, Full), NocoDB (`@skeems/nocodb`, Full), Strapi (`@skeems/strapi`, **Data**), and WikiData (`@skeems/wikidata`, **Read** — see below). Each full/data adapter is wired into the cross-adapter conformance suite under `test/conformance/` (Strapi runs the data-tier subset against a user-provided instance). That completes the plan's "suggested first three" (plus Strapi); Supabase is the natural next Full-tier target.
+
+**Read tier (new):** beyond Full/Data/Content, WikiData established a **Read** tier — introspection + `get`/`find` only, no writes. WikiData (`@skeems/wikidata`) maps its knowledge graph to two synthetic collections (`items`, `properties`) over the public MediaWiki/Wikibase API (no auth), with a live smoke (`npm run smoke:wikidata`) rather than a conformance fixture since there's nothing to provision or seed. This shows the adapter abstraction extends to read-only reference sources, not just writable backends — relevant for other public read APIs (PostgREST read-only, OpenStreetMap/Nominatim, etc.).
 
 ## How the ranking works
 

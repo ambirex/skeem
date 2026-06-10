@@ -72,6 +72,7 @@ extra keys differ:
 | `pocketbase` | `@skeems/pocketbase` | Full | `url`, and either `token` (superuser token) or `email` + `password` |
 | `nocodb` | `@skeems/nocodb` | Full | `url`, `token` (an `xc-token` API token), `base` (base id; optional when the instance hosts one base) |
 | `strapi` | `@skeems/strapi` | Data | `url`, `token` (API token, for CRUD), and `email` + `password` or `adminToken` (for schema introspection) |
+| `wikidata` | `@skeems/wikidata` | Read | `url` (default `https://www.wikidata.org`), `language` (default `en`); no auth |
 
 ```yaml
 # PocketBase via email/password
@@ -105,6 +106,17 @@ Strapi is **data-tier**: discovery and CRUD work, but `define`/`init` are
 unsupported (Strapi content types are code-defined). Introspection uses the
 admin content-type-builder API, which rejects API tokens — hence the admin
 credentials.
+
+```yaml
+# WikiData (read-only knowledge graph) — no auth
+adapter: wikidata
+connection:
+  url: https://www.wikidata.org
+  language: en
+```
+
+WikiData is **read-tier**: `ls`/`describe`/`discover`/`get`/`find` only. It
+exposes two synthetic collections (`items`, `properties`); writes are rejected.
 
 Adapter-specific behavior and limitations are documented in each package's
 README (for example, PocketBase and NocoDB introspect many-to-many relations but

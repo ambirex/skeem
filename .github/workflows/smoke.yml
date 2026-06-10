@@ -47,3 +47,19 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run conformance:${{ matrix.adapter }}
+
+  wikidata-smoke:
+    name: WikiData live smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Hits the public WikiData API, so it depends on network + WikiData uptime
+    # rather than a provisioned fixture; informational, not gating.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run smoke:wikidata

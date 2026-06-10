@@ -136,7 +136,10 @@ relation parameters carry the `?`/`??` grammar in their description.
 Most setups use a `.skeemrc.yaml` (adapter + connection). Otherwise pass
 `--url`/`--token` (and `--adapter` for non-Directus backends). Adapter-specific
 auth and capabilities are in `docs/reference/configuration.md` and each adapter's
-README. Strapi is data-tier (no `define`/`init`); the others are full-tier.
+README. Capability tiers vary: Directus/PocketBase/NocoDB are full-tier; Strapi is
+data-tier (no `define`/`init`); WikiData is read-tier (`get`/`find` only, writes
+rejected). An adapter rejects unsupported operations with a clear error — let the
+envelope tell you rather than assuming.
 
 ## Deeper references
 
