@@ -12,6 +12,7 @@ export class SchemaCache {
   constructor(
     rootDir: string,
     private readonly ttlMs: number,
+    private readonly source?: { adapter: string; sourceUrl: string },
   ) {
     this.cacheDir = path.join(rootDir, ".skeem", "cache");
     this.schemaPath = path.join(this.cacheDir, "schema.json");
@@ -21,6 +22,18 @@ export class SchemaCache {
   async readFresh(): Promise<Schema | undefined> {
     const status = await this.status();
     if (!status.exists || status.ageMs === undefined || status.ageMs > this.ttlMs) {
+      return undefined;
+    }
+
+    // A cache written by a different adapter or backend URL describes another
+    // backend entirely — within-TTL is not enough to count as fresh. The cache
+    // is keyed by rootDir, so switching --adapter/--url from the same directory
+    // would otherwise serve the previous backend's schema.
+    if (
+      this.source &&
+      status.meta &&
+      (status.meta.adapter !== this.source.adapter || status.meta.sourceUrl !== this.source.sourceUrl)
+    ) {
       return undefined;
     }
 

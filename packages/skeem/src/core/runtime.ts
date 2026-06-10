@@ -118,7 +118,10 @@ export class SkeemRuntime {
   static async create(cwd: string, cli: CliGlobalOptions): Promise<SkeemRuntime> {
     const config = await loadConfig(cwd, cli);
     const adapter = await createAdapter(config.adapter, config.connection);
-    const cache = new SchemaCache(config.rootDir, config.cache.ttlMs);
+    const cache = new SchemaCache(config.rootDir, config.cache.ttlMs, {
+      adapter: adapter.name,
+      sourceUrl: config.connection.url,
+    });
     return new SkeemRuntime(config, adapter, cache);
   }
 

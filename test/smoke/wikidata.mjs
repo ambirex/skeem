@@ -3,34 +3,10 @@
 // (no auth) and asserts get/find behavior plus the read-only guard. Network-
 // dependent by nature; intended for `npm run smoke:wikidata` and an
 // informational CI job rather than a hard gate.
-import { spawnSync } from "node:child_process";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { createRunner, makeAssert } from "./live-lib.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(__dirname, "../..");
-const cli = path.join(repoRoot, "packages", "skeem", "dist", "bin", "skeem.js");
-const base = ["--adapter", "wikidata", "--url", "https://www.wikidata.org", "--json"];
-
-function run(args, { expectFailure = false } = {}) {
-  const result = spawnSync("node", [cli, ...args, ...base], { encoding: "utf8" });
-  let parsed;
-  try {
-    parsed = JSON.parse(result.stdout);
-  } catch {
-    throw new Error(`Non-JSON output for "${args.join(" ")}":\n${result.stdout}\n${result.stderr}`);
-  }
-  if (!expectFailure && !parsed.ok) {
-    throw new Error(`"${args.join(" ")}" failed: ${JSON.stringify(parsed.error)}`);
-  }
-  return parsed;
-}
-
-function assert(condition, label, payload) {
-  if (!condition) {
-    throw new Error(`WikiData smoke failed: ${label}\n${JSON.stringify(payload, null, 2)}`);
-  }
-}
+const run = createRunner(["--adapter", "wikidata", "--url", "https://www.wikidata.org", "--json"]);
+const assert = makeAssert("WikiData");
 
 const results = {};
 
