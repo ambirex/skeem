@@ -10,7 +10,8 @@ Relational-aware CLI for headless backends, built for AI agents.
 
 `skeem` 0.5.x is published to npm: run it with `npx skeem` or install it globally. Node 20+ is required.
 
-- Adapters: **Directus**, **PocketBase**, **NocoDB** (full-tier), **Strapi** (data-tier), and **WikiData** (read-tier)
+- Adapters: **Directus**, **PocketBase**, **NocoDB** (full-tier); **Strapi** (data-tier); **WikiData**, **MusicBrainz**, **OpenStreetMap**, **Open Library**, **CrossRef**, **TMDB** (read-tier reference datasets)
+- Cross-dataset pivoting: read adapters share an `externalIds` vocabulary with WikiData as the hub — see [docs/reference/external-ids.md](docs/reference/external-ids.md)
 - Discovery, CRUD, upsert, link, unlink, and compound `exec`
 - Relation-aware writes with dot notation plus `@`, `?`, and `??`
 - Schema `discover`, `diff`, and `define`, including m2o/m2m relations and enum fields
@@ -26,7 +27,7 @@ See [docs/adapter-roadmap.md](docs/adapter-roadmap.md) for shipped and candidate
 - Compact relational grammar: agents can create or resolve related records without hand-building multiple API calls.
 - Schema-aware discovery: `ls`, `describe`, and `discover` let an agent inspect the backend before acting.
 - Predictable output: every command can return a stable JSON envelope with `--json`.
-- Backend abstraction: core behavior lives in `packages/skeem`; adapters (Directus, PocketBase, NocoDB, Strapi, WikiData) are swapped via the `adapter` config field.
+- Backend abstraction: core behavior lives in `packages/skeem`; ten adapters are swapped via the `adapter` config field — headless backends for writes, public reference datasets (WikiData, MusicBrainz, OSM, Open Library, CrossRef, TMDB) for linked lookups.
 - Self-describing: `skeem tools` emits LLM tool definitions from the live schema, and [SKILL.md](SKILL.md) teaches the envelope + relation grammar.
 
 ## Where It Fits
@@ -135,7 +136,7 @@ skeem/
 │   ├── skeem-pocketbase/ # PocketBase adapter (full)
 │   ├── skeem-nocodb/     # NocoDB adapter (full)
 │   ├── skeem-strapi/     # Strapi adapter (data tier)
-│   └── skeem-wikidata/   # WikiData adapter (read-only)
+│   └── skeem-{wikidata,musicbrainz,osm,openlibrary,crossref,tmdb}/  # read-tier reference adapters
 ├── docs/                 # Guides, references, architecture notes, full spec
 ├── test/                 # Smoke + conformance harness and fixtures
 ├── SKILL.md              # Agent playbook
@@ -151,6 +152,7 @@ npm run build
 npm run test
 npm run smoke:directus          # deep Directus end-to-end suite
 npm run conformance:directus    # cross-adapter contract suite (also :pocketbase, :nocodb)
+npm run smoke:wikidata          # live reference-API smokes (also :musicbrainz, :osm, :openlibrary, :crossref, :tmdb)
 ```
 
 CI runs build, typecheck, unit tests, and a package-content guard on every push

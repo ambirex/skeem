@@ -65,7 +65,7 @@ Matching is exact and case-sensitive (imdb values are lowercased for you);
 ## Pivot matrix
 
 Which adapters **emit** each key on `get`, and which **accept** one as a lookup
-(`get` id or `find` filter). Filled in as adapters land.
+(`get` id or `find` filter). All six read adapters are shipped.
 
 | Key | Emitted by | Accepted as lookup by |
 | --- | --- | --- |

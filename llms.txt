@@ -1,6 +1,6 @@
 # skeem
 
-> Relational-aware CLI for headless backends (Directus, PocketBase, NocoDB, Strapi), built for AI agents. One schema-aware command replaces several raw API calls, and every command returns a stable JSON envelope under `--json`.
+> Relational-aware CLI for headless backends (Directus, PocketBase, NocoDB, Strapi) and public reference datasets (WikiData, MusicBrainz, OpenStreetMap, Open Library, CrossRef, TMDB), built for AI agents. One schema-aware command replaces several raw API calls, and every command returns a stable JSON envelope under `--json`.
 
 How to drive skeem well:
 - Always pass `--json` and parse the envelope: `{ "ok": true, "operation", "data", "count" }`, or `{ "ok": false, "error": { "code", "message" } }`. Branch on `ok` then `error.code` (NOT_FOUND, DUPLICATE, VALIDATION, AUTH, RELATION_NOT_FOUND, AMBIGUOUS, SCHEMA_UNSUPPORTED, USAGE, ERROR), never on message text. Exit code is 0 on success, 1 on failure.
@@ -20,7 +20,8 @@ How to drive skeem well:
 - [System Features](docs/reference/system-features.md): claims, provenance, versions, trash, annotations, aliases, idempotency.
 
 ## Adapters
-- [Adapter Roadmap](docs/adapter-roadmap.md): shipped adapters (Directus, PocketBase, NocoDB full-tier; Strapi data-tier) and what each supports.
+- [Adapter Roadmap](docs/adapter-roadmap.md): shipped adapters (Directus, PocketBase, NocoDB full-tier; Strapi data-tier; WikiData, MusicBrainz, OSM, Open Library, CrossRef, TMDB read-tier) and what each supports.
+- [External IDs](docs/reference/external-ids.md): the shared externalIds vocabulary and how to pivot between reference datasets (WikiData is the hub; reverse lookups by imdb/doi/orcid/isbn/P-id).
 
 ## Deeper
 - [Architecture Overview](docs/architecture/overview.md): introspect → serialize → diff → plan → apply, and the adapter contract.

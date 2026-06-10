@@ -48,13 +48,17 @@ jobs:
       - run: npm ci
       - run: npm run conformance:${{ matrix.adapter }}
 
-  wikidata-smoke:
-    name: WikiData live smoke
+  live-smoke:
+    name: Live smoke (${{ matrix.adapter }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Hits the public WikiData API, so it depends on network + WikiData uptime
-    # rather than a provisioned fixture; informational, not gating.
+    # These hit public reference APIs (no provisioned fixture), so they depend
+    # on network + upstream uptime; informational, not gating.
     continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        adapter: [wikidata, musicbrainz, osm, openlibrary, crossref]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -62,4 +66,22 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run smoke:wikidata
+      - run: npm run smoke:${{ matrix.adapter }}
+
+  tmdb-smoke:
+    name: Live smoke (tmdb)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # TMDB needs an API token. `secrets` cannot gate a job directly, so the
+    # smoke script itself exits 0 with { skipped: true } when the env is empty.
+    continue-on-error: true
+    env:
+      TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run smoke:tmdb

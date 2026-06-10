@@ -1,6 +1,6 @@
 ---
 name: skeem
-description: Use when reading or writing relational data in a headless backend (Directus, PocketBase, NocoDB, or Strapi) through the `skeem` CLI. Covers the JSON envelope contract, the discovery-first workflow, the relation grammar (@id / ?field=value / ??field=value), and the coordination primitives (claims, idempotency, provenance, trash) that make multi-step writes safe.
+description: Use when reading or writing relational data in a headless backend (Directus, PocketBase, NocoDB, Strapi) or querying public reference datasets (WikiData, MusicBrainz, OpenStreetMap, Open Library, CrossRef, TMDB) through the `skeem` CLI. Covers the JSON envelope contract, the discovery-first workflow, the relation grammar (@id / ?field=value / ??field=value), the coordination primitives (claims, idempotency, provenance, trash) that make multi-step writes safe, and pivoting between reference datasets via shared external IDs.
 ---
 
 # Driving skeem as an agent
@@ -137,9 +137,35 @@ Most setups use a `.skeemrc.yaml` (adapter + connection). Otherwise pass
 `--url`/`--token` (and `--adapter` for non-Directus backends). Adapter-specific
 auth and capabilities are in `docs/reference/configuration.md` and each adapter's
 README. Capability tiers vary: Directus/PocketBase/NocoDB are full-tier; Strapi is
-data-tier (no `define`/`init`); WikiData is read-tier (`get`/`find` only, writes
-rejected). An adapter rejects unsupported operations with a clear error — let the
-envelope tell you rather than assuming.
+data-tier (no `define`/`init`); WikiData, MusicBrainz, OSM, Open Library,
+CrossRef, and TMDB are read-tier (`get`/`find` only, writes rejected; only TMDB
+needs a token). An adapter rejects unsupported operations with a clear error —
+let the envelope tell you rather than assuming.
+
+## Pivoting between reference datasets
+
+The read-tier adapters share an **`externalIds`** vocabulary
+(`docs/reference/external-ids.md`): every `get` returns identifiers from other
+datasets, so you can hop between them with one CLI call per hop. Values are
+**always arrays** — read `externalIds.wikidata[0]`, not `externalIds.wikidata`.
+
+```bash
+# Name -> the WikiData hub -> everything else:
+skeem find items --where label="Douglas Adams" --adapter wikidata --json   # Q42
+skeem get items Q42 --adapter wikidata --json
+#   externalIds: { imdb: [...], musicbrainz_artist: [...], openlibrary: [...], ... }
+skeem get authors OL272947A --adapter openlibrary --json                   # links back: wikidata Q42
+
+# Reverse lookups (id -> record):
+skeem find items --where imdb=tt0133093 --adapter wikidata --json   # any curated key or raw P-id
+skeem find movies --where imdb=tt0133093 --adapter tmdb --json
+skeem find works --where orcid=0000-0002-1641-3403 --adapter crossref --json
+skeem find editions --where isbn=9780345391803 --adapter openlibrary --json
+```
+
+Etiquette: the MusicBrainz/Nominatim clients throttle to ~1 req/s **per
+process** — when looping over many records you are responsible for your own
+pacing (the CLI is one process per call).
 
 ## Deeper references
 

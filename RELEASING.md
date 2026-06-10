@@ -1,53 +1,46 @@
 # Releasing
 
-`skeem` ships as seven npm packages:
+`skeem` ships every package under `packages/*` to npm in **lockstep**: one
+shared version, with every internal dependency pinned exactly. The invariants:
 
-- `@skeems/types` — shared types and the adapter contract (zero dependencies)
-- `@skeems/directus` — the Directus adapter, pins `@skeems/types` exactly
-- `@skeems/pocketbase` — the PocketBase adapter, pins `@skeems/types` exactly
-- `@skeems/nocodb` — the NocoDB adapter, pins `@skeems/types` exactly
-- `@skeems/strapi` — the Strapi adapter, pins `@skeems/types` exactly
-- `@skeems/wikidata` — the read-only WikiData adapter, pins `@skeems/types` exactly
-- `skeem` — the CLI, pins every adapter and `@skeems/types` exactly
+- `@skeems/types` has zero dependencies; every adapter pins `@skeems/types`
+  exactly; the `skeem` CLI pins `@skeems/types` and **every** adapter exactly.
+- Publish order: `@skeems/types` first, then every other `@skeems/*` adapter
+  (any order among themselves), then `skeem` last.
 
-Because the packages pin each other exactly, they are released together at the
-same version. Publish order matters: dependencies go first, so the order is
-`@skeems/types` → adapters (`@skeems/directus`, `@skeems/pocketbase`,
-`@skeems/nocodb`, `@skeems/strapi`, `@skeems/wikidata`) → `skeem`.
+Adding an adapter never changes this file — the loops below derive the package
+list from `packages/`.
 
 ## Prerequisites
 
-- `npm whoami` returns the user that owns (or will own) the `@skeems` org.
-- The `@skeems` npm organization exists. Create it once at
-  https://www.npmjs.com/org/create if it does not.
+- `npm whoami` returns the user that owns the `@skeems` org.
 - The working tree is clean and on `main`.
 
 ## Releasing
 
-Pick a new version (e.g. `0.6.0`).
+Pick a new version and export it (the re-pin step reads it from the
+environment):
 
 ```bash
-# 1. Bump all seven package.json versions in lockstep.
-npm version 0.6.0 -w @skeems/types --no-git-tag-version
-npm version 0.6.0 -w @skeems/directus --no-git-tag-version
-npm version 0.6.0 -w @skeems/pocketbase --no-git-tag-version
-npm version 0.6.0 -w @skeems/nocodb --no-git-tag-version
-npm version 0.6.0 -w @skeems/strapi --no-git-tag-version
-npm version 0.6.0 -w @skeems/wikidata --no-git-tag-version
-npm version 0.6.0 -w skeem --no-git-tag-version
+export V=0.6.0
 
-# 2. Update the exact pins by hand:
-#    packages/skeem-directus/package.json   -> dependencies["@skeems/types"] = "0.6.0"
-#    packages/skeem-pocketbase/package.json -> dependencies["@skeems/types"] = "0.6.0"
-#    packages/skeem-nocodb/package.json     -> dependencies["@skeems/types"] = "0.6.0"
-#    packages/skeem-strapi/package.json     -> dependencies["@skeems/types"] = "0.6.0"
-#    packages/skeem-wikidata/package.json   -> dependencies["@skeems/types"] = "0.6.0"
-#    packages/skeem/package.json            -> dependencies["@skeems/types"]      = "0.6.0"
-#    packages/skeem/package.json            -> dependencies["@skeems/directus"]   = "0.6.0"
-#    packages/skeem/package.json            -> dependencies["@skeems/pocketbase"] = "0.6.0"
-#    packages/skeem/package.json            -> dependencies["@skeems/nocodb"]     = "0.6.0"
-#    packages/skeem/package.json            -> dependencies["@skeems/strapi"]     = "0.6.0"
-#    packages/skeem/package.json            -> dependencies["@skeems/wikidata"]   = "0.6.0"
+# 1. Bump every workspace to $V in lockstep.
+for d in packages/*/; do
+  npm version "$V" -w "$(node -p "require('./$d/package.json').name")" --no-git-tag-version
+done
+
+# 2. Re-pin every internal @skeems/* dependency to $V.
+node -e '
+  const fs = require("fs");
+  for (const d of fs.readdirSync("packages")) {
+    const f = `packages/${d}/package.json`;
+    const pkg = JSON.parse(fs.readFileSync(f, "utf8"));
+    for (const dep of Object.keys(pkg.dependencies ?? {})) {
+      if (dep.startsWith("@skeems/")) pkg.dependencies[dep] = process.env.V;
+    }
+    fs.writeFileSync(f, JSON.stringify(pkg, null, 2) + "\n");
+  }
+'
 
 # 3. Sync the lockfile.
 npm install --package-lock-only
@@ -57,17 +50,17 @@ npm run build && npm run typecheck && npm test
 
 # 5. Commit, tag, push.
 git add packages/*/package.json package-lock.json
-git commit -m "Release v0.6.0"
-git tag v0.6.0
+git commit -m "Release v$V"
+git tag "v$V"
 git push && git push --tags
 
-# 6. Publish in dependency order (types first, CLI last).
+# 6. Publish in dependency order: types -> adapters -> cli.
 npm publish -w @skeems/types
-npm publish -w @skeems/directus
-npm publish -w @skeems/pocketbase
-npm publish -w @skeems/nocodb
-npm publish -w @skeems/strapi
-npm publish -w @skeems/wikidata
+for d in packages/*/; do
+  name="$(node -p "require('./$d/package.json').name")"
+  case "$name" in @skeems/types|skeem) continue ;; esac
+  npm publish -w "$name"
+done
 npm publish -w skeem
 ```
 
@@ -94,5 +87,8 @@ The CLI should print a JSON usage envelope.
 - `0.3.0` — added `@skeems/pocketbase`; adapter registry + `AdapterError` contract.
 - `0.4.0` — added `@skeems/nocodb`; five-package lockstep.
 - `0.5.0` — added `@skeems/strapi` (data tier); six-package lockstep.
-- `0.6.0` (unreleased) — `skeem tools`, adapter `link`/`unlink` capability, and
-  `@skeems/wikidata` (read tier); seven-package lockstep.
+- `0.6.0` (unreleased) — `skeem tools`; adapter `link`/`unlink` capability; the
+  read-tier reference family (`@skeems/wikidata` as external-ID hub, plus
+  `@skeems/musicbrainz`, `@skeems/osm`, `@skeems/openlibrary`,
+  `@skeems/crossref`, `@skeems/tmdb`); schema-cache adapter validation;
+  twelve-package lockstep.
