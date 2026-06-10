@@ -18,7 +18,13 @@ results.ls = true;
 const douglas = run(["get", "items", "Q42"]);
 assert(douglas.data.label === "Douglas Adams", "get Q42 resolves Douglas Adams", douglas);
 assert(Array.isArray(douglas.data.claims?.P31) && douglas.data.claims.P31.includes("Q5"), "Q42 is an instance of human (P31 -> Q5)", douglas);
+assert(douglas.data.externalIds?.imdb?.includes("nm0010930"), "Q42 externalIds carry the IMDb id", douglas);
+assert(douglas.data.externalIds?.musicbrainz_artist?.length > 0, "Q42 externalIds carry a MusicBrainz artist id", douglas);
 results.get = true;
+
+const reverse = run(["find", "items", "--where", "imdb=nm0010930"]);
+assert(reverse.data.some((r) => r.id === "Q42"), "reverse lookup by IMDb id finds Q42", reverse);
+results.reverseFind = true;
 
 const ada = run(["find", "items", "--where", "label=Ada Lovelace"]);
 assert(ada.count > 0 && ada.data.some((r) => r.id === "Q7259"), "find surfaces Ada Lovelace (Q7259)", ada);

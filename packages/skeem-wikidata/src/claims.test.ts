@@ -1,9 +1,16 @@
 import { describe, expect, test } from "vitest";
 
-import { simplifyClaims } from "./claims.js";
+import { EXTERNAL_ID_KEYS, EXTERNAL_ID_PROPERTIES, partitionClaims, simplifyClaims } from "./claims.js";
 
-function valueStatement(type: string, value: unknown) {
-  return { mainsnak: { snaktype: "value" as const, property: "P1", datavalue: { type, value } } };
+function valueStatement(type: string, value: unknown, datatype?: string) {
+  return {
+    mainsnak: {
+      snaktype: "value" as const,
+      property: "P1",
+      ...(datatype ? { datatype } : {}),
+      datavalue: { type, value },
+    },
+  };
 }
 
 describe("simplifyClaims", () => {
@@ -47,5 +54,58 @@ describe("simplifyClaims", () => {
 
   test("undefined claims yield an empty object", () => {
     expect(simplifyClaims(undefined)).toEqual({});
+  });
+});
+
+describe("partitionClaims", () => {
+  test("splits external-id statements out of ordinary claims", () => {
+    const claims = {
+      P31: [valueStatement("wikibase-entityid", { id: "Q5" }, "wikibase-item")],
+      P345: [valueStatement("string", "nm0010930", "external-id")],
+      P434: [valueStatement("string", "e9ed318d-8cc5-4cf8-ab77-505e39ab6ea4", "external-id")],
+    };
+    const result = partitionClaims(claims);
+
+    expect(result.claims).toEqual({ P31: ["Q5"] });
+    expect(result.externalIds).toEqual({
+      imdb: ["nm0010930"],
+      musicbrainz_artist: ["e9ed318d-8cc5-4cf8-ab77-505e39ab6ea4"],
+    });
+  });
+
+  test("uncurated external-id properties keep their P-id key", () => {
+    const claims = {
+      P9999: [valueStatement("string", "xyz", "external-id")],
+    };
+    expect(partitionClaims(claims).externalIds).toEqual({ P9999: ["xyz"] });
+  });
+
+  test("P856 (url datatype) maps to official_website", () => {
+    const claims = {
+      P856: [valueStatement("string", "https://douglasadams.com/", "url")],
+    };
+    const result = partitionClaims(claims);
+    expect(result.externalIds).toEqual({ official_website: ["https://douglasadams.com/"] });
+    expect(result.claims).toEqual({});
+  });
+
+  test("externalIds skip novalue snaks and dedupe; values are strings", () => {
+    const claims = {
+      P345: [
+        valueStatement("string", "nm0010930", "external-id"),
+        { mainsnak: { snaktype: "novalue" as const, property: "P345", datatype: "external-id" } },
+        valueStatement("string", "nm0010930", "external-id"),
+      ],
+      P698: [valueStatement("string", 23193287 as unknown as string, "external-id")],
+    };
+    const result = partitionClaims(claims);
+    expect(result.externalIds.P698 ?? result.externalIds.pubmed).toEqual(["23193287"]);
+    expect(result.externalIds.imdb).toEqual(["nm0010930"]);
+  });
+
+  test("the curated map and its reverse stay in sync", () => {
+    for (const [pid, key] of Object.entries(EXTERNAL_ID_PROPERTIES)) {
+      expect(EXTERNAL_ID_KEYS[key]).toBe(pid);
+    }
   });
 });

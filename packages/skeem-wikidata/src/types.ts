@@ -24,6 +24,8 @@ export interface WikibaseTermValue {
 export interface WikibaseSnak {
   snaktype: "value" | "novalue" | "somevalue";
   property: string;
+  /** The property's datatype, e.g. "external-id", "wikibase-item", "url". */
+  datatype?: string;
   datavalue?: { value: unknown; type: string };
 }
 
@@ -41,6 +43,14 @@ export interface WikibaseEntity {
   descriptions?: Record<string, WikibaseTermValue>;
   aliases?: Record<string, WikibaseTermValue[]>;
   claims?: Record<string, WikibaseStatement[]>;
+  sitelinks?: Record<string, { site: string; title: string; url?: string }>;
+}
+
+export interface MediaWikiSearchResponse {
+  query?: {
+    search?: Array<{ title: string }>;
+  };
+  error?: { code?: string; info?: string };
 }
 
 export interface WbGetEntitiesResponse {

@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **External-ID hub on the WikiData adapter** (`docs/reference/external-ids.md`):
+  `get` now returns external identifiers under `externalIds` with a shared key
+  vocabulary (`imdb`, `doi`, `musicbrainz_artist`, … — curated from 29 verified
+  properties; uncurated ones keep their `P####` key), plus the language's
+  Wikipedia sitelink and official website. `find items` gains **reverse lookup
+  by external id** (`--where imdb=nm0010930`, `--where P434=<mbid>`, any curated
+  key or raw P-id) via CirrusSearch `haswbstatement`, and `--offset` support on
+  label searches.
+
 - **WikiData adapter** (`@skeems/wikidata`), a new **read tier**: read-only access
   to WikiData (or any Wikibase instance) over the public MediaWiki Action API (no
   auth). Two synthetic collections — `items` (Q-ids) and `properties` (P-ids) —
@@ -32,6 +41,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`SKILL.md`** (agent playbook) and **`llms.txt`** (curated repo map) teaching
   the JSON envelope contract, discovery-first workflow, relation grammar, and
   coordination primitives.
+
+### Changed
+
+- **WikiData record shape**: external-id statements no longer appear inside
+  `claims` (e.g. `claims.P345`); they live in `externalIds` under friendly keys.
+  Unsupported `--sort` (and `--offset` where it cannot be honored) now fail with
+  a validation error instead of being silently ignored.
+- The schema cache is invalidated when the active adapter or connection URL
+  differs from the one that wrote it — switching `--adapter`/`--url` from the
+  same directory no longer serves the previous backend's schema.
 
 ### CI
 

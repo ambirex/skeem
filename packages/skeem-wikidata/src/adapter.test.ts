@@ -29,7 +29,11 @@ const q42 = {
   descriptions: { en: { language: "en", value: "British writer" } },
   aliases: { en: [{ language: "en", value: "Douglas Noël Adams" }] },
   claims: {
-    P31: [{ mainsnak: { snaktype: "value", property: "P31", datavalue: { type: "wikibase-entityid", value: { id: "Q5" } } } }],
+    P31: [{ mainsnak: { snaktype: "value", property: "P31", datatype: "wikibase-item", datavalue: { type: "wikibase-entityid", value: { id: "Q5" } } } }],
+    P345: [{ mainsnak: { snaktype: "value", property: "P345", datatype: "external-id", datavalue: { type: "string", value: "nm0010930" } } }],
+  },
+  sitelinks: {
+    enwiki: { site: "enwiki", title: "Douglas Adams", url: "https://en.wikipedia.org/wiki/Douglas_Adams" },
   },
 };
 
@@ -58,10 +62,10 @@ describe("createWikiDataAdapter", () => {
     expect([...schema.collections.keys()].sort()).toEqual(["items", "properties"]);
     const items = schema.collections.get("items")!;
     expect(items.primaryKey).toBe("id");
-    expect([...items.fields.keys()].sort()).toEqual(["aliases", "description", "label"]);
+    expect([...items.fields.keys()].sort()).toEqual(["aliases", "description", "externalIds", "label"]);
   });
 
-  test("get returns the entity with simplified claims", async () => {
+  test("get partitions claims into ordinary claims + externalIds (with wikipedia sitelink)", async () => {
     mockApi((action) => {
       if (action === "wbgetentities") return { entities: { Q42: q42 } };
       return {};
@@ -76,7 +80,55 @@ describe("createWikiDataAdapter", () => {
       description: "British writer",
       aliases: ["Douglas Noël Adams"],
       claims: { P31: ["Q5"] },
+      externalIds: {
+        imdb: ["nm0010930"],
+        wikipedia: ["https://en.wikipedia.org/wiki/Douglas_Adams"],
+      },
     });
+  });
+
+  test("find by external id uses haswbstatement and hydrates summaries", async () => {
+    const calls = mockApi((action, params) => {
+      if (action === "query") {
+        expect(params.get("srsearch")).toBe("haswbstatement:P345=nm0010930");
+        return { query: { search: [{ title: "Q42" }] } };
+      }
+      if (action === "wbgetentities") {
+        expect(params.get("ids")).toBe("Q42");
+        return { entities: { Q42: q42 } };
+      }
+      return {};
+    });
+    const adapter = createWikiDataAdapter();
+    await adapter.connect({ url: "https://www.wikidata.org" });
+
+    const rows = await adapter.find("items", { imdb: "NM0010930" }); // imdb lowercased
+    expect(rows).toEqual([{ id: "Q42", label: "Douglas Adams", description: "British writer" }]);
+    expect(calls.length).toBe(2);
+  });
+
+  test("find accepts a raw P-id filter key", async () => {
+    mockApi((action, params) => {
+      if (action === "query") {
+        expect(params.get("srsearch")).toBe("haswbstatement:P434=e9ed318d-8cc5-4cf8-ab77-505e39ab6ea4");
+        return { query: { search: [] } };
+      }
+      return {};
+    });
+    const adapter = createWikiDataAdapter();
+    await adapter.connect({ url: "https://www.wikidata.org" });
+    const rows = await adapter.find("items", { P434: "e9ed318d-8cc5-4cf8-ab77-505e39ab6ea4" });
+    expect(rows).toEqual([]);
+  });
+
+  test("external-id find validation: properties collection, combined filters, limit cap, sort", async () => {
+    const adapter = createWikiDataAdapter();
+    await adapter.connect({ url: "https://www.wikidata.org" });
+
+    await expect(adapter.find("properties", { imdb: "nm1" })).rejects.toThrow(/items only/i);
+    await expect(adapter.find("items", { imdb: "nm1", label: "x" })).rejects.toThrow(/cannot be combined/i);
+    await expect(adapter.find("items", { imdb: "nm1" }, { limit: 51 })).rejects.toThrow(/up to 50/i);
+    await expect(adapter.find("items", { label: "x" }, { sort: "label" })).rejects.toThrow(/--sort/i);
   });
 
   test("get throws not_found for a missing entity", async () => {
@@ -120,10 +172,10 @@ describe("createWikiDataAdapter", () => {
     expect(rows).toEqual([{ id: "Q42", label: "Douglas Adams", description: "British writer" }]);
   });
 
-  test("find without label or id is a validation error", async () => {
+  test("find without label, id, or external-id filter is a validation error", async () => {
     const adapter = createWikiDataAdapter();
     await adapter.connect({ url: "https://www.wikidata.org" });
-    await expect(adapter.find("items", { foo: "bar" })).rejects.toThrow(/label=.*or.*id=/i);
+    await expect(adapter.find("items", { foo: "bar" })).rejects.toThrow(/label=<text>.*external-id filter/i);
   });
 
   test("unknown collection is rejected", async () => {
