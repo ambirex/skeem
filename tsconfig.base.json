@@ -31,6 +31,9 @@
       ],
       "@skeems/openlibrary": [
         "packages/skeem-openlibrary/src/index.ts"
+      ],
+      "@skeems/crossref": [
+        "packages/skeem-crossref/src/index.ts"
       ]
     },
     "strict": true,

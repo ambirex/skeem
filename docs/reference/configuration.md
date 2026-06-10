@@ -76,6 +76,7 @@ extra keys differ:
 | `musicbrainz` | `@skeems/musicbrainz` | Read | `url` (default `https://musicbrainz.org`); no auth (client enforces ~1 req/s etiquette) |
 | `osm` | `@skeems/osm` | Read | `url` (default `https://api.openstreetmap.org`), `searchUrl` (default `https://nominatim.openstreetmap.org`; self-host for batch); no auth (~1 req/s etiquette) |
 | `openlibrary` | `@skeems/openlibrary` | Read | `url` (default `https://openlibrary.org`); no auth |
+| `crossref` | `@skeems/crossref` | Read | `url` (default `https://api.crossref.org`), `mailto` (optional; joins the polite pool); no key |
 
 ```yaml
 # PocketBase via email/password

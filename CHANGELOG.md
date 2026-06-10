@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CrossRef adapter** (`@skeems/crossref`), read tier: a `works` collection
+  keyed by lowercase DOI (URL/`doi:` prefixes stripped; path-encoded so legacy
+  SICI DOIs with `<>;#?` work). `get` surfaces authors with bare ORCIDs and an
+  `externalIds` of `orcid`/`funder_doi`/`issn`/`isbn_*`; `find` does
+  bibliographic search plus a **reverse pivot by ORCID**
+  (`--where orcid=…` → `filter=orcid:`) and `issn` filtering.
+  `connection.mailto` joins CrossRef's polite pool. A 404 names the
+  other-agency (DataCite) possibility. Live smoke: `npm run smoke:crossref`.
+
 - **Open Library adapter** (`@skeems/openlibrary`), read tier: `works`,
   `editions`, `authors` keyed by bare OL ids (path prefixes stripped). Authors'
   `remote_ids` and editions' ISBN/OCLC/LCCN/`identifiers` surface in the shared

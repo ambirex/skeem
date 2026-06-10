@@ -17,6 +17,7 @@ const REGISTRY: Record<string, () => Promise<AdapterFactory>> = {
   musicbrainz: async () => (await import("@skeems/musicbrainz")).createMusicBrainzAdapter,
   osm: async () => (await import("@skeems/osm")).createOsmAdapter,
   openlibrary: async () => (await import("@skeems/openlibrary")).createOpenLibraryAdapter,
+  crossref: async () => (await import("@skeems/crossref")).createCrossRefAdapter,
 };
 
 export function knownAdapters(): string[] {
