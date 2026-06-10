@@ -6,12 +6,12 @@ Relational-aware CLI for headless backends, built for AI agents.
 
 ## Status
 
-`skeem` 0.1.x is published to npm: run it with `npx skeem` or install it globally. Node 20+ is required.
+`skeem` 0.2.x is published to npm: run it with `npx skeem` or install it globally. Node 20+ is required.
 
 - Directus adapter with schema introspection
 - Discovery, CRUD, upsert, link, unlink, and compound `exec`
 - Relation-aware writes with dot notation plus `@`, `?`, and `??`
-- Schema `discover`, `diff`, and `define`
+- Schema `discover`, `diff`, and `define`, including m2o/m2m relations and enum fields
 - System features for aliases, provenance, versions, trash, claims, annotations, and idempotency
 - Stable JSON envelopes designed for agent callers
 

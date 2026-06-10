@@ -54,8 +54,7 @@ Directions:
 - collections only in file
 - collections only in live
 - field mismatches
-- relation mismatches
-- many-to-many drift
+- relation mismatches (m2o and m2m)
 - summary counts
 
 Use `--json` when you want a structured drift report.
@@ -77,15 +76,80 @@ The dry-run output includes:
 - which steps are destructive
 - which steps are blocked or skipped
 
+## Relations
+
+Relations live in each collection's `relations` map, keyed by the field name:
+
+```yaml
+collections:
+  articles:
+    fields:
+      author_id:
+        type: integer
+    relations:
+      author_id:
+        collection: people
+        type: m2o
+      tags:
+        collection: tags
+        type: m2m
+```
+
+- `collection` is the **related** collection.
+- `type` is `m2o` or `m2m` (`o2m` is the inverse of an `m2o` and is created implicitly).
+
+A many-to-many relation is declared on **both** collections (e.g. `articles.tags`
+and `tags.articles`); `define` collapses the two sides into a single junction.
+`discover` already emits both sides, so a discover → define round-trip is clean.
+
+Junction detail is optional and defaults to a convention
+(`<a>_<b>` junction collection, `<collection>_id` foreign keys). Declare it
+explicitly only when it diverges from that convention:
+
+```yaml
+    relations:
+      tags:
+        collection: tags
+        type: m2m
+        relatedField: articles          # inverse field on the related collection
+        junctionCollection: article_tag
+        junctionField: article_id        # junction FK back to this collection
+        inverseJunctionField: tag_id     # junction FK to the related collection
+```
+
+Notes and limits:
+
+- Relation changes (m2o target/type) apply as a delete-then-recreate, which is
+  **not atomic** — a failure can leave the relation dropped.
+- m2m **structural** changes (e.g. a different junction collection) are reported
+  as blocked: remove and recreate them deliberately, since dropping a junction
+  loses its rows.
+
+## Enum Fields
+
+An enum is a `string` field with an `enum` list:
+
+```yaml
+    fields:
+      status:
+        type: string
+        enum: [draft, published, archived]
+```
+
+On Directus this maps to a dropdown interface over the listed choices; the
+underlying column stays a string. `discover` reads the choices back into
+`enum`. Directus choices store a separate label and value — skeem only tracks
+the value, so a re-`define` collapses any custom label to equal its value.
+
 ## Current Directus Coverage
 
 The current implementation supports a meaningful schema workflow, including:
 
 - collection creation
-- field creation
-- safe field updates
+- field creation (including enum/choice fields)
+- safe field updates (including enum choice changes)
 - relation creation
-- relation updates
+- relation updates (m2o, delete-then-recreate)
 - many-to-many relation creation and removal
 - destructive schema actions behind `--allow-destructive`
 

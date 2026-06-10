@@ -47,6 +47,9 @@ skeem find <collection> [--where field=value] [--limit N] [--offset N] [--sort f
 ```
 
 `find` currently uses equality-style filtering with repeated `--where` flags.
+Filters match by equality only — there are no range or substring operators yet.
+`--expand` resolves one level deep (the adapter fetches `["*", "<relation>.*"]`),
+so a nested path like `a.b.c` only resolves the first hop.
 
 ## Data Writes
 
