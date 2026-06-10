@@ -1,0 +1,52 @@
+{
+  "name": "@skeems/osm",
+  "version": "0.5.0",
+  "description": "Read-only OpenStreetMap adapter for the skeem CLI (OSM API + Nominatim search).",
+  "license": "MIT",
+  "author": "Brent Doll <brent.doll@gmail.com>",
+  "homepage": "https://github.com/ambirex/skeem#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ambirex/skeem.git",
+    "directory": "packages/skeem-osm"
+  },
+  "bugs": {
+    "url": "https://github.com/ambirex/skeem/issues"
+  },
+  "keywords": [
+    "skeem",
+    "openstreetmap",
+    "osm",
+    "nominatim",
+    "adapter",
+    "geo"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@skeems/types": "0.5.0"
+  },
+  "scripts": {
+    "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run build"
+  }
+}

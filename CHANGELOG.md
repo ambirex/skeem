@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **OpenStreetMap adapter** (`@skeems/osm`), read tier: one `elements`
+  collection keyed by type-prefixed ids (`way/5013364`) — OSM ids collide across
+  node/way/relation and Nominatim cannot filter by type, so the id carries the
+  type. `get` uses the OSM 0.6 API (410 Gone → NOT_FOUND); `find` searches by
+  name via Nominatim (`connection.searchUrl`, self-hostable) with
+  `extratags`-derived externalIds. Only the element's **bare** `wikidata` tag
+  feeds `externalIds.wikidata` — `brand:wikidata`/`operator:wikidata` stay in
+  `tags` (they identify the brand, not the place). ~1 req/s in-process throttle;
+  ODbL attribution in the README. Live smoke: `npm run smoke:osm`.
+
 - **MusicBrainz adapter** (`@skeems/musicbrainz`), read tier: six collections
   (`artists`, `release_groups`, `releases`, `recordings`, `works`, `labels`)
   keyed by MBID over the WS/2 API (no auth; in-process ~1 req/s throttle +

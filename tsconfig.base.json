@@ -25,6 +25,9 @@
       ],
       "@skeems/musicbrainz": [
         "packages/skeem-musicbrainz/src/index.ts"
+      ],
+      "@skeems/osm": [
+        "packages/skeem-osm/src/index.ts"
       ]
     },
     "strict": true,
