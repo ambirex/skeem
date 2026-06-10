@@ -151,6 +151,20 @@ export interface SkemAdapter {
   deleteField?(collection: string, fieldName: string): Promise<void>;
   deleteRelation?(input: SchemaRelationInput): Promise<void>;
   deleteCollection?(collection: string): Promise<void>;
+  /**
+   * Link two records over an m2m relation. Backends whose m2m has no writable
+   * junction collection (PocketBase relation arrays, NocoDB native `mm`)
+   * implement this so the core can link without a junction; backends with a real
+   * junction (Directus) omit it and the core writes the junction row directly.
+   * Implementations must be idempotent and report whether a change occurred.
+   */
+  link?(collection: string, id: PrimaryKey, relation: Relation, targetId: PrimaryKey): Promise<LinkResult>;
+  unlink?(collection: string, id: PrimaryKey, relation: Relation, targetId: PrimaryKey): Promise<LinkResult>;
+}
+
+export interface LinkResult {
+  /** True if this call changed the link (false if it was already in the desired state). */
+  changed: boolean;
 }
 
 /**

@@ -31,7 +31,18 @@ Requires PocketBase **v0.23+** (flat field schema API).
 
 **Full** — supports discovery, CRUD, schema mutation (`define`), system features (`init`, `claim`).
 
+### Relations
+
+PocketBase stores many-to-many as an array of related ids on a `relation` field
+(no junction collection). Record-level linking works: `skeem link`/`unlink`
+read-modify-write that array. m2o relations work fully (`skeem link` sets the id).
+
+What is **not** supported is creating or altering an m2m relation's *schema* via
+`define` — `define` introspects m2m relations read-only and `createRelation`
+for an m2m surfaces a clear capability error. Define the relation field in
+PocketBase, then use `skeem link`/`unlink` to manage the records.
+
 ### Limitations
 
-- **m2m relation writes are not supported.** PocketBase does not use junction collections; many-to-many is stored as an array of IDs on a `relation` field. skeem's `define` can introspect m2m relations read-only, but cannot create or update them. Use m2o relations or model the junction explicitly.
+- m2m relation *schema* mutation via `define` is unsupported (record linking is).
 - Unique constraints are stored as SQL `CREATE UNIQUE INDEX` statements and are single-column only.

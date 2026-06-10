@@ -78,6 +78,32 @@ const tableList = [
   { id: "tbl_companies", title: "companies" },
 ];
 
+const articlesTable = {
+  id: "tbl_articles",
+  title: "articles",
+  columns: [
+    { id: "c_aid", title: "Id", uidt: "ID", pk: true },
+    { id: "c_atitle", title: "title", uidt: "SingleLineText" },
+    { id: "c_tags", title: "tags", uidt: "Links", colOptions: { type: "mm", fk_related_model_id: "tbl_tags" } },
+  ],
+};
+
+const tagsTable = {
+  id: "tbl_tags",
+  title: "tags",
+  columns: [
+    { id: "c_tid", title: "Id", uidt: "ID", pk: true },
+    { id: "c_tname", title: "name", uidt: "SingleLineText" },
+  ],
+};
+
+const m2mTableList = [
+  { id: "tbl_articles", title: "articles" },
+  { id: "tbl_tags", title: "tags" },
+];
+
+const tagsRelation = { type: "m2m" as const, field: "tags", relatedCollection: "tags", relatedField: "id" };
+
 describe("createNocoDbAdapter", () => {
   test("exposes a named adapter surface", () => {
     const adapter = createNocoDbAdapter();
@@ -214,5 +240,29 @@ describe("createNocoDbAdapter", () => {
 
     expect(calls.some((c) => c.url.endsWith("/api/v2/meta/bases"))).toBe(true);
     expect(calls.some((c) => c.url.includes("/meta/bases/only_base/tables"))).toBe(true);
+  });
+
+  test("link posts to the nested-link endpoint by column id", async () => {
+    const calls = mockCatalog({ tbl_articles: articlesTable, tbl_tags: tagsTable }, m2mTableList);
+    const adapter = createNocoDbAdapter();
+    await adapter.connect({ url: "http://noco.test", token: "t", base: "base1" });
+    const result = await adapter.link!("articles", 5, tagsRelation, 9);
+
+    expect(result).toEqual({ changed: true });
+    const post = calls.find((c) => c.method === "POST" && c.url.includes("/links/"));
+    expect(post?.url).toContain("/api/v2/tables/tbl_articles/links/c_tags/records/5");
+    expect(post?.body).toEqual({ Id: 9 });
+  });
+
+  test("unlink deletes from the nested-link endpoint", async () => {
+    const calls = mockCatalog({ tbl_articles: articlesTable, tbl_tags: tagsTable }, m2mTableList);
+    const adapter = createNocoDbAdapter();
+    await adapter.connect({ url: "http://noco.test", token: "t", base: "base1" });
+    const result = await adapter.unlink!("articles", 5, tagsRelation, 9);
+
+    expect(result).toEqual({ changed: true });
+    const del = calls.find((c) => c.method === "DELETE" && c.url.includes("/links/"));
+    expect(del?.url).toContain("/api/v2/tables/tbl_articles/links/c_tags/records/5");
+    expect(del?.body).toEqual({ Id: 9 });
   });
 });

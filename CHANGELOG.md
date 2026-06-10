@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Adapter `link`/`unlink` capability** for m2m record linking on backends with
+  no writable junction collection. The `SkemAdapter` contract gains optional
+  `link`/`unlink` methods; the core's `link`/`unlink` verbs use them for m2m when
+  present and fall back to the junction-row path otherwise (Directus is
+  unchanged). **PocketBase** links via the relation-id array (accurate
+  already-linked reporting); **NocoDB** links via its nested-link endpoint. This
+  closes the m2m record-linking gap both backends previously had.
 - **`skeem tools --format openai|anthropic`** generates LLM tool definitions from
   the live schema (spec Part VI §27): create/find/get/update/delete tools per
   collection, with parameter schemas derived from field types, required flags,

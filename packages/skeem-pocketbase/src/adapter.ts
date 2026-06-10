@@ -265,7 +265,40 @@ export function createPocketBaseAdapter(): SkemAdapter {
         indexes: col.indexes,
       });
     },
+
+    // m2m in PocketBase is an array of related ids on the record's relation
+    // field (there is no junction collection), so link/unlink read-modify-write
+    // that array. Reporting accurate `changed` is cheap given the read.
+    async link(collection: string, id: string | number, relation: Relation, targetId: string | number) {
+      const record = await client.get<Record<string, unknown>>(`/api/collections/${collection}/records/${id}`);
+      const current = toIdArray(record[relation.field]);
+      if (current.includes(String(targetId))) {
+        return { changed: false };
+      }
+      await client.patch(`/api/collections/${collection}/records/${id}`, {
+        [relation.field]: [...current, String(targetId)],
+      });
+      return { changed: true };
+    },
+
+    async unlink(collection: string, id: string | number, relation: Relation, targetId: string | number) {
+      const record = await client.get<Record<string, unknown>>(`/api/collections/${collection}/records/${id}`);
+      const current = toIdArray(record[relation.field]);
+      if (!current.includes(String(targetId))) {
+        return { changed: false };
+      }
+      await client.patch(`/api/collections/${collection}/records/${id}`, {
+        [relation.field]: current.filter((value) => value !== String(targetId)),
+      });
+      return { changed: true };
+    },
   } satisfies SkemAdapter;
+}
+
+function toIdArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((entry) => String(entry));
+  if (value === undefined || value === null || value === "") return [];
+  return [String(value)];
 }
 
 function mapPbFieldType(field: PocketBaseField): FieldType {

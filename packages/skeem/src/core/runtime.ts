@@ -1079,6 +1079,14 @@ export class SkeemRuntime {
     try {
       const sourceRecord = await this.adapter.get(sourceCollection.name, sourceReference.id);
       const target = await this.resolveLinkTarget(schema, relation, parsed.target, true);
+
+      // Backends whose m2m has no writable junction collection implement link()
+      // directly; this runs before buildLinkMutationPlan, which requires junction
+      // metadata those backends do not have.
+      if (relation.type === "m2m" && this.adapter.link) {
+        return await this.applyRelationViaCapability("link", cli, request, inputRefs, sourceCollection, sourceReference.id, relation, target);
+      }
+
       const mutation = buildLinkMutationPlan(relation, sourceReference.id, target.id);
 
       if (mutation.kind === "m2o") {
@@ -1203,6 +1211,11 @@ export class SkeemRuntime {
     try {
       const sourceRecord = await this.adapter.get(sourceCollection.name, sourceReference.id);
       const target = await this.resolveLinkTarget(schema, relation, parsed.target, false);
+
+      if (relation.type === "m2m" && this.adapter.unlink) {
+        return await this.applyRelationViaCapability("unlink", cli, request, inputRefs, sourceCollection, sourceReference.id, relation, target);
+      }
+
       const mutation = buildUnlinkMutationPlan(relation, sourceReference.id, target.id);
 
       if (mutation.kind === "m2o") {
@@ -1943,6 +1956,63 @@ export class SkeemRuntime {
     } catch (error) {
       throw this.normalizeError(error, targetCollection.name);
     }
+  }
+
+  /**
+   * Link/unlink an m2m relation through the adapter's own capability (used when
+   * the backend has no writable junction collection). Mirrors the junction-row
+   * path's dry-run, idempotency-reporting, and provenance behavior.
+   */
+  private async applyRelationViaCapability(
+    op: "link" | "unlink",
+    cli: CliGlobalOptions,
+    request: IdempotencyRequest,
+    inputRefs: unknown,
+    sourceCollection: Collection,
+    sourceId: PrimaryKey,
+    relation: Relation,
+    target: LinkTargetResolution,
+  ): Promise<SuccessEnvelope> {
+    const doneAction = op === "link" ? "linked" : "unlinked";
+    const noopAction = op === "link" ? "already_linked" : "already_unlinked";
+
+    if (cli.dryRun) {
+      return toSuccessEnvelope({
+        operation: "dry_run",
+        action: op,
+        collection: sourceCollection.name,
+        data: this.describeRelationMutation(doneAction, true, sourceCollection, sourceId, relation, target),
+        plan: [this.buildRelationPlanEntry(op, sourceCollection.name, sourceId, relation, target)],
+      });
+    }
+
+    const apply = op === "link" ? this.adapter.link! : this.adapter.unlink!;
+    const { changed } = await apply.call(this.adapter, sourceCollection.name, sourceId, relation, target.id);
+
+    if (!changed) {
+      return toSuccessEnvelope({
+        operation: op,
+        action: noopAction,
+        collection: sourceCollection.name,
+        data: this.describeRelationMutation(noopAction, false, sourceCollection, sourceId, relation, target),
+      });
+    }
+
+    const envelope = toSuccessEnvelope({
+      operation: op,
+      action: doneAction,
+      collection: sourceCollection.name,
+      data: this.describeRelationMutation(doneAction, true, sourceCollection, sourceId, relation, target),
+      plan: [this.buildRelationPlanEntry(op, sourceCollection.name, sourceId, relation, target)],
+    });
+    await this.recordProvenance({
+      collection: sourceCollection.name,
+      recordId: sourceId,
+      operation: op,
+      cli,
+      inputRefs: cli.idempotencyKey ? this.prepareIdempotentInputRefs(request, inputRefs, envelope) : inputRefs,
+    });
+    return envelope;
   }
 
   private buildRelationPlanEntry(

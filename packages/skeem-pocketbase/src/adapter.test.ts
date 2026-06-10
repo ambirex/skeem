@@ -216,6 +216,58 @@ describe("createPocketBaseAdapter", () => {
     expect(articles?.relations[0]?.relatedCollection).toBe("tags");
   });
 
+  test("link appends to the relation array and reports changed", async () => {
+    const calls: Array<{ url: string; method: string; body: any }> = [];
+    globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if ((init?.method ?? "GET") === "GET") {
+        return jsonResponse({ id: "rec1", tags: ["t1"] });
+      }
+      return jsonResponse({ id: "rec1" });
+    }) as unknown as typeof fetch;
+
+    const adapter = createPocketBaseAdapter();
+    await adapter.connect({ url: "http://example.test", token: "t" });
+    const relation = { type: "m2m" as const, field: "tags", relatedCollection: "tags", relatedField: "id" };
+    const result = await adapter.link!("articles", "rec1", relation, "t2");
+
+    expect(result).toEqual({ changed: true });
+    const patch = calls.find((c) => c.method === "PATCH");
+    expect(patch?.body).toEqual({ tags: ["t1", "t2"] });
+  });
+
+  test("link is a no-op when the target is already linked", async () => {
+    const calls: Array<{ method: string }> = [];
+    globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
+      calls.push({ method: init?.method ?? "GET" });
+      return jsonResponse({ id: "rec1", tags: ["t1", "t2"] });
+    }) as unknown as typeof fetch;
+
+    const adapter = createPocketBaseAdapter();
+    await adapter.connect({ url: "http://example.test", token: "t" });
+    const relation = { type: "m2m" as const, field: "tags", relatedCollection: "tags", relatedField: "id" };
+    const result = await adapter.link!("articles", "rec1", relation, "t2");
+
+    expect(result).toEqual({ changed: false });
+    expect(calls.some((c) => c.method === "PATCH")).toBe(false);
+  });
+
+  test("unlink removes from the relation array and reports changed", async () => {
+    const calls: Array<{ method: string; body: any }> = [];
+    globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
+      calls.push({ method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      return jsonResponse({ id: "rec1", tags: ["t1", "t2"] });
+    }) as unknown as typeof fetch;
+
+    const adapter = createPocketBaseAdapter();
+    await adapter.connect({ url: "http://example.test", token: "t" });
+    const relation = { type: "m2m" as const, field: "tags", relatedCollection: "tags", relatedField: "id" };
+    const result = await adapter.unlink!("articles", "rec1", relation, "t2");
+
+    expect(result).toEqual({ changed: true });
+    expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ tags: ["t1"] });
+  });
+
   test("createField emits a select field with values for enum fields", async () => {
     const calls: Array<{ url: string; body: unknown }> = [];
     let callCount = 0;

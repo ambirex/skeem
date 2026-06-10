@@ -55,8 +55,11 @@ columns (`CreatedTime`, `LastModifiedTime`, etc.) and virtual columns
 ### Relations
 
 `LinkToAnotherRecord` maps to skeem relations: `bt` → `m2o`, `hm` → `o2m`,
-`mm` → `m2m`. m2o relations work fully (`skeem link` sets the foreign key).
-m2m relations are introspected and can be created via `define`, but record-level
-`link`/`unlink` over a native `mm` link is **not yet supported** — NocoDB hides
-the junction table that skeem's link path writes to. Use m2o relations for
-record-level linking, or model the junction as an explicit table.
+`mm` → `m2m`. m2o relations work fully (`skeem link` sets the foreign key), and
+m2m relations can be created via `define`.
+
+NocoDB hides its `mm` junction table, but exposes a dedicated nested-link
+endpoint, so record-level m2m `link`/`unlink` works: skeem calls
+`POST`/`DELETE /api/v2/tables/{table}/links/{column}/records/{id}` rather than
+writing a junction row. NocoDB does not report whether a link already existed, so
+the link operation is idempotent and always reports success.

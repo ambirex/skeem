@@ -253,7 +253,38 @@ export function createNocoDbAdapter(): SkemAdapter {
       await client.delete(`/api/v2/meta/columns/${link.columnId}`);
       requireCatalog().invalidate();
     },
+
+    // NocoDB hides its m2m junction table, but exposes a dedicated nested-link
+    // endpoint keyed on the LinkToAnotherRecord column id. NocoDB does not report
+    // whether the link already existed, so `changed` is optimistic (the end state
+    // is correct either way).
+    async link(collection: string, id: string | number, relation: Relation, targetId: string | number) {
+      const link = await requireLink(collection, relation.field);
+      await client.post(
+        `/api/v2/tables/${link.tableId}/links/${link.columnId}/records/${encodeURIComponent(String(id))}`,
+        { Id: targetId },
+      );
+      return { changed: true };
+    },
+
+    async unlink(collection: string, id: string | number, relation: Relation, targetId: string | number) {
+      const link = await requireLink(collection, relation.field);
+      await client.delete(
+        `/api/v2/tables/${link.tableId}/links/${link.columnId}/records/${encodeURIComponent(String(id))}`,
+        { Id: targetId },
+      );
+      return { changed: true };
+    },
   } satisfies SkemAdapter;
+
+  async function requireLink(collection: string, field: string): Promise<{ tableId: string; columnId: string }> {
+    const t = await table(collection);
+    const link = t.links.get(field);
+    if (!link) {
+      throw new AdapterError(`Relation "${field}" not found on "${collection}".`, { kind: "not_found" });
+    }
+    return { tableId: t.id, columnId: link.columnId };
+  }
 }
 
 async function resolveBaseId(client: NocoDbClient, config: AdapterConfig): Promise<string> {
