@@ -152,3 +152,46 @@ export interface SkemAdapter {
   deleteRelation?(input: SchemaRelationInput): Promise<void>;
   deleteCollection?(collection: string): Promise<void>;
 }
+
+/**
+ * Semantic classification of a backend request failure. Adapters translate
+ * their backend-specific HTTP errors into this vocabulary so the core can map
+ * them to user-facing error classes without knowing any backend's quirks.
+ */
+export type AdapterErrorKind = "not_found" | "validation" | "duplicate" | "auth" | "unknown";
+
+export interface AdapterErrorInit {
+  kind?: AdapterErrorKind;
+  status?: number;
+  code?: string;
+  /** True when the failure means the target collection/table does not exist. */
+  collectionMissing?: boolean;
+  field?: string;
+  details?: Record<string, unknown>;
+}
+
+/**
+ * The error every adapter throws for a failed backend request. Because it lives
+ * in this shared package, the core can `instanceof`-check it across package
+ * boundaries and branch on `kind`/`collectionMissing` rather than duck-typing a
+ * specific backend's error shape.
+ */
+export class AdapterError extends Error {
+  readonly kind: AdapterErrorKind;
+  readonly status?: number;
+  readonly code?: string;
+  readonly collectionMissing: boolean;
+  readonly field?: string;
+  readonly details?: Record<string, unknown>;
+
+  constructor(message: string, init: AdapterErrorInit = {}) {
+    super(message);
+    this.name = "AdapterError";
+    this.kind = init.kind ?? "unknown";
+    this.status = init.status;
+    this.code = init.code;
+    this.collectionMissing = init.collectionMissing ?? false;
+    this.field = init.field;
+    this.details = init.details;
+  }
+}

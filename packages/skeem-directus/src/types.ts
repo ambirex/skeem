@@ -1,5 +1,7 @@
 // Shared data model and input shapes come from @skeems/types. They are
 // re-exported so the rest of this package keeps importing from "./types.js".
+import { AdapterError, type AdapterErrorKind } from "@skeems/types";
+
 export type {
   AdapterConfig,
   Collection,
@@ -62,14 +64,37 @@ export interface DirectusRelationRow {
   } | null;
 }
 
-export class DirectusRequestError extends Error {
+export class DirectusRequestError extends AdapterError {
   constructor(
     message: string,
-    public readonly status: number,
-    public readonly code?: string,
-    public readonly details?: Record<string, unknown>,
+    status: number,
+    code?: string,
+    details?: Record<string, unknown>,
   ) {
-    super(message);
+    super(message, {
+      status,
+      code,
+      kind: directusErrorKind(status, code),
+      // A missing collection surfaces as 404, or 403 phrased as "does not exist".
+      collectionMissing: status === 404 || (status === 403 && /does not exist/i.test(message)),
+      details,
+    });
     this.name = "DirectusRequestError";
   }
+}
+
+function directusErrorKind(status: number, code?: string): AdapterErrorKind {
+  if (status === 401 || status === 403) {
+    return "auth";
+  }
+  if (code === "FAILED_VALIDATION") {
+    return "validation";
+  }
+  if (code === "RECORD_NOT_UNIQUE") {
+    return "duplicate";
+  }
+  if (status === 404) {
+    return "not_found";
+  }
+  return "unknown";
 }

@@ -3,7 +3,7 @@ import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import YAML from "yaml";
 
-import { createDirectusAdapter } from "@skeems/directus";
+import { createAdapter } from "./adapters.js";
 
 import { SchemaCache } from "../cache/schema-cache.js";
 import {
@@ -14,6 +14,7 @@ import {
   UsageError,
   ValidationError,
 } from "../errors/index.js";
+import { AdapterError } from "../types/index.js";
 import { loadConfig } from "../config/load-config.js";
 import { requireCollection, resolveCollectionName, resolveExpandPaths, resolveRelation, filterCollections } from "./schema.js";
 import { describeCollection, schemaToDocument } from "../schema/serialization.js";
@@ -115,8 +116,7 @@ export class SkeemRuntime {
 
   static async create(cwd: string, cli: CliGlobalOptions): Promise<SkeemRuntime> {
     const config = await loadConfig(cwd, cli);
-    const adapter = createDirectusAdapter();
-    await adapter.connect(config.connection);
+    const adapter = await createAdapter(config.adapter, config.connection);
     const cache = new SchemaCache(config.rootDir, config.cache.ttlMs);
     return new SkeemRuntime(config, adapter, cache);
   }
@@ -2045,10 +2045,7 @@ export class SkeemRuntime {
         ...(options?.limit !== undefined ? { limit: options.limit } : {}),
       });
     } catch (error) {
-      if (
-        isDirectusRequestError(error) &&
-        (error.status === 404 || (error.status === 403 && /does not exist/i.test(error.message)))
-      ) {
+      if (error instanceof AdapterError && error.collectionMissing) {
         return [];
       }
       throw error;
@@ -2065,10 +2062,7 @@ export class SkeemRuntime {
         ...(options?.sort ? { sort: options.sort } : {}),
       });
     } catch (error) {
-      if (
-        isDirectusRequestError(error) &&
-        (error.status === 404 || (error.status === 403 && /does not exist/i.test(error.message)))
-      ) {
+      if (error instanceof AdapterError && error.collectionMissing) {
         return [];
       }
       throw error;
@@ -2085,10 +2079,7 @@ export class SkeemRuntime {
         ...(options?.sort ? { sort: options.sort } : {}),
       });
     } catch (error) {
-      if (
-        isDirectusRequestError(error) &&
-        (error.status === 404 || (error.status === 403 && /does not exist/i.test(error.message)))
-      ) {
+      if (error instanceof AdapterError && error.collectionMissing) {
         return [];
       }
       throw error;
@@ -2105,10 +2096,7 @@ export class SkeemRuntime {
         ...(options?.sort ? { sort: options.sort } : {}),
       });
     } catch (error) {
-      if (
-        isDirectusRequestError(error) &&
-        (error.status === 404 || (error.status === 403 && /does not exist/i.test(error.message)))
-      ) {
+      if (error instanceof AdapterError && error.collectionMissing) {
         return [];
       }
       throw error;
@@ -2870,28 +2858,22 @@ export class SkeemRuntime {
   }
 
   private normalizeError(error: unknown, collection?: string): Error {
-    if (error instanceof Error && !isDirectusRequestError(error)) {
-      return error;
+    if (!(error instanceof AdapterError)) {
+      return error instanceof Error ? error : new Error(String(error));
     }
 
-    if (isDirectusRequestError(error)) {
-      const directusError = error;
-      if (directusError.status === 401 || directusError.status === 403) {
-        return new AuthError(directusError.message);
-      }
-      if (directusError.code === "FAILED_VALIDATION") {
-        return new ValidationError(collection ?? "unknown", "unknown", directusError.message);
-      }
-      if (directusError.code === "RECORD_NOT_UNIQUE") {
+    switch (error.kind) {
+      case "auth":
+        return new AuthError(error.message);
+      case "validation":
+        return new ValidationError(collection ?? "unknown", error.field ?? "unknown", error.message);
+      case "duplicate":
         return new DuplicateError(collection ?? "unknown", []);
-      }
-      if (directusError.status === 404) {
+      case "not_found":
         return new NotFoundError(collection ?? "unknown");
-      }
-      return new Error(directusError.message);
+      default:
+        return new Error(error.message);
     }
-
-    return new Error(String(error));
   }
 
   private preparePlanEntry(entry: SchemaPlanEntry, allowDestructive: boolean): SchemaPlanEntry {
@@ -3143,21 +3125,6 @@ async function confirmSchemaPlanExecution(plan: SchemaPlanEntry[], cli: CliGloba
   } finally {
     rl.close();
   }
-}
-
-function isDirectusRequestError(error: unknown): error is {
-  status: number;
-  code?: string;
-  message: string;
-} {
-  return Boolean(
-    error &&
-      typeof error === "object" &&
-      "status" in error &&
-      typeof (error as { status?: unknown }).status === "number" &&
-      "message" in error &&
-      typeof (error as { message?: unknown }).message === "string",
-  );
 }
 
 export async function readExecPlanFromStdin(): Promise<ExecPlanInput> {
