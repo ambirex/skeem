@@ -1,6 +1,42 @@
 # skeem
 
-Relational-aware CLI for headless backends, built for AI agents.
+Relational-aware CLI for headless backends and public reference datasets, built for AI agents. **Agents should look facts up, not make them up.**
+
+Try it in ten seconds — no install, no backend, no API key:
+
+```bash
+npx skeem get items Q42 --adapter wikidata --url https://www.wikidata.org --json
+```
+
+```jsonc
+{
+  "ok": true,
+  "operation": "get",
+  "collection": "items",
+  "data": {
+    "id": "Q42",
+    "label": "Douglas Adams",
+    "description": "British science fiction writer and humorist (1952–2001)",
+    "externalIds": {
+      "imdb": ["nm0010930"],
+      "viaf": ["113230702"],
+      "musicbrainz_artist": ["e9ed318d-8cc5-4cf8-ab77-505e39ab6ea4"],
+      "openlibrary": ["OL272947A"]
+      // … trimmed
+    }
+  }
+}
+```
+
+The same CLI then writes to your own backend, schema-aware — and `--enrich`
+bridges the two, folding a reference record into the write so your agent never
+types a release date from memory:
+
+```bash
+skeem create movies --enrich tmdb:movies:603 --map externalIds.imdb=imdb_id --json
+```
+
+![skeem demo: a zero-config WikiData query, then a schema-aware create enriched from a reference source](docs/assets/skeem-demo.gif)
 
 `skeem` gives agents and developers a compact, schema-aware way to inspect data, perform relational writes, manage schema drift, and coordinate multi-step work against a headless backend. The core is backend-agnostic; backends are pluggable adapters.
 
@@ -8,10 +44,11 @@ Relational-aware CLI for headless backends, built for AI agents.
 
 ## Status
 
-`skeem` 0.5.x is published to npm: run it with `npx skeem` or install it globally. Node 20+ is required.
+`skeem` is on npm — run it with `npx skeem` or install it globally. Node 20+ is required.
 
 - Adapters: **Directus**, **PocketBase**, **NocoDB** (full-tier); **Strapi** (data-tier); **WikiData**, **MusicBrainz**, **OpenStreetMap**, **Open Library**, **CrossRef**, **TMDB** (read-tier reference datasets)
 - Cross-dataset pivoting: read adapters share an `externalIds` vocabulary with WikiData as the hub — see [docs/reference/external-ids.md](docs/reference/external-ids.md)
+- Cross-adapter enrichment: `create`/`upsert --enrich tmdb:movies:603` folds a reference record into the write payload — see [docs/reference/cli.md](docs/reference/cli.md#enrichment---enrich)
 - Discovery, CRUD, upsert, link, unlink, and compound `exec`
 - Relation-aware writes with dot notation plus `@`, `?`, and `??`
 - Schema `discover`, `diff`, and `define`, including m2o/m2m relations and enum fields
@@ -154,6 +191,16 @@ npm run smoke:directus          # deep Directus end-to-end suite
 npm run conformance:directus    # cross-adapter contract suite (also :pocketbase, :nocodb)
 npm run smoke:wikidata          # live reference-API smokes (also :musicbrainz, :osm, :openlibrary, :crossref, :tmdb)
 ```
+
+## Contributing & Support
+
+`skeem` is a personal tool its author uses daily, so the roadmap follows real use
+([docs/next-slices.md](docs/next-slices.md) tracks it, including what's
+deliberately *not* next). Issues are welcome; **adapter PRs especially** — the
+read-adapter template makes a new reference dataset roughly a day of work, and
+each one multiplies what `--enrich` and the `externalIds` pivot graph can do.
+See [docs/adapter-roadmap.md](docs/adapter-roadmap.md) for candidates, and the
+live smoke matrix in `.github/workflows/smoke.yml` for what "done" looks like.
 
 CI runs build, typecheck, unit tests, and a package-content guard on every push
 ([ci.yml](.github/workflows/ci.yml)); the end-to-end smoke and conformance suites

@@ -1,6 +1,33 @@
 # skeem
 
-Core `skeem` package containing the CLI entrypoint and backend-agnostic runtime.
+Relational-aware CLI for headless backends (Directus, PocketBase, NocoDB,
+Strapi) and public reference datasets (WikiData, MusicBrainz, OpenStreetMap,
+Open Library, CrossRef, TMDB), built for AI agents. **Agents should look facts
+up, not make them up.**
+
+Try it in ten seconds — no install, no backend, no API key:
+
+```bash
+npx skeem get items Q42 --adapter wikidata --url https://www.wikidata.org --json
+```
+
+Every command returns a stable JSON envelope (`ok` / `error.code`), writes are
+schema-aware with a compact relation grammar (`@id`, `?field=value`,
+`??field=value`), coordination primitives (claims, idempotency, provenance,
+soft delete) make multi-agent writes safe, and `--enrich` folds a reference
+record into a `create`/`upsert` so your agent never types a release date from
+memory:
+
+```bash
+skeem create movies --enrich tmdb:movies:603 --map externalIds.imdb=imdb_id --json
+```
+
+Full docs, the agent playbook (SKILL.md), and the design notes live in the
+[GitHub repo](https://github.com/ambirex/skeem).
+
+---
+
+This is the core package: the CLI entrypoint and backend-agnostic runtime.
 
 ## What Lives Here
 
