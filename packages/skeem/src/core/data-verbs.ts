@@ -296,7 +296,7 @@ function parseExecLinkTarget(input: ExecLinkTargetInput | undefined): ParsedLink
   };
 }
 
-function parsePrimaryKeyLike(value: string): PrimaryKey {
+export function parsePrimaryKeyLike(value: string): PrimaryKey {
   return /^-?\d+$/.test(value) ? Number.parseInt(value, 10) : value;
 }
 

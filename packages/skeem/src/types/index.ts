@@ -36,8 +36,20 @@ export interface ResolvedConfig {
     exclude: string[];
   };
   extensions: Record<string, unknown>;
+  sources: Record<string, SourceConfigEntry>;
   cache: {
     ttlMs: number;
+  };
+}
+
+// Deliberately loose: a broken source entry must not break commands that never
+// touch it, so validation happens lazily when --enrich names the source.
+export interface SourceConfigEntry {
+  adapter?: string;
+  connection?: {
+    url?: string;
+    token?: string;
+    [key: string]: unknown;
   };
 }
 
@@ -145,6 +157,12 @@ export interface SuccessEnvelope {
   data?: unknown;
   count?: number;
   plan?: Array<OperationLogEntry | SchemaPlanEntry>;
+  enrichedFrom?: {
+    source: string;
+    collection: string;
+    id: PrimaryKey;
+  };
+  enrichedFields?: string[];
 }
 
 export interface ErrorEnvelope {

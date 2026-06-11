@@ -1002,7 +1002,7 @@ The core runtime is now covering the main system-table and data-operation founda
 
 ## Proposed (designed, not scheduled)
 
-- **Cross-adapter enrichment (`--enrich`)** — fill a `create`/`upsert` payload from a read-tier reference source (TMDB, Wikidata, …) via a second source adapter, keyed on the shared `externalIds` vocabulary. Full design in [proposals/cross-adapter-enrichment.md](proposals/cross-adapter-enrichment.md).
+- **Cross-adapter enrichment (`--enrich`)** — ✅ implemented (see the CHANGELOG `[Unreleased]` entry and [reference/cli.md](reference/cli.md#enrichment---enrich)). Design and implementation notes in [proposals/cross-adapter-enrichment.md](proposals/cross-adapter-enrichment.md). Deferred follow-ups from the proposal's "out" list (multiple sources, enrichment in `exec` plans, `--map` transforms, auto-discovery via a shared `externalIds` key) plus a conformance-suite `sources:` scenario and a live wikidata-sourced smoke remain unscheduled.
 
 ## Not Next
 

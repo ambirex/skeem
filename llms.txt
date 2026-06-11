@@ -8,6 +8,7 @@ How to drive skeem well:
 - Relation grammar on write values: `42` (scalar/fk id), `@42` (link by id), `?field=value` (resolve existing), `??field=value` (resolve-or-create), `child.field` (nested inline). Prefer `?`/`??` over manual find-then-create.
 - `skeem tools --format anthropic|openai` generates typed tool definitions from the live schema.
 - Coordination primitives keep multi-step writes safe: `--idempotency-key`, `claim`/`claims`/`release`, soft-delete + `restore`, provenance/versions (`skeem init` provisions the system tables).
+- Enrich writes from a reference dataset: `create`/`upsert` `--enrich source:collection:id` (or `"source:collection?field=value"`) with `--map externalIds.imdb=imdb_id`; sources are named in the config `sources:` block, explicit values always win, and the envelope reports `enrichedFrom`/`enrichedFields`.
 
 ## Start here
 - [SKILL.md](SKILL.md): the agent playbook — envelope contract, discovery-first workflow, relation grammar, coordination primitives, and the `skeem tools` generator.

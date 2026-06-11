@@ -106,6 +106,18 @@ skeem find items --where imdb=tt0133093 --adapter wikidata --json   # → the Ma
 Each hop is one CLI call; read the id out of `externalIds.<key>[0]` and pass it
 to the next adapter.
 
+**Folding a reference record into a write** — `--enrich` on `create`/`upsert`
+does the fetch + field mapping in one step, with `--map` reaching into
+`externalIds` (arrays take `[0]` onto scalar fields):
+
+```bash
+skeem create movies --enrich tmdb:movies:603 --map externalIds.imdb=imdb_id --json
+```
+
+See the [CLI reference](cli.md#enrichment---enrich) for the grammar and merge
+rule, and the [configuration reference](configuration.md#sources-enrichment)
+for the `sources:` block.
+
 ## Etiquette
 
 The public endpoints behind these adapters are shared infrastructure. The

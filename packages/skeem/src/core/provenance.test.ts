@@ -23,6 +23,7 @@ const baseConfig: ResolvedConfig = {
     exclude: [],
   },
   extensions: {},
+  sources: {},
   cache: {
     ttlMs: 60_000,
   },

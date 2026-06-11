@@ -1,6 +1,6 @@
 # Proposal: cross-adapter enrichment (`--enrich`)
 
-> Status: **designed, not scheduled.** Captured 2026-06-11 from a working session. This is a future slice, not current behavior.
+> Status: **implemented** (2026-06-11, same day it was designed). Current behavior is documented in [reference/cli.md](../reference/cli.md#enrichment---enrich) and [reference/configuration.md](../reference/configuration.md#sources-enrichment); deliberate divergences from this design are listed under "Implementation notes" at the end.
 
 ## Context
 
@@ -96,3 +96,14 @@ The success envelope gains `enrichedFrom: { source, collection, id }` and `enric
 ## Verification
 
 End-to-end demo: configure a `tmdb` source + a writable Directus `movies` collection, then `skeem create movies --enrich tmdb:movies:603 --map externalIds.imdb=imdb_id --json` and confirm the created record carries TMDB's title/release_date/overview + the IMDb id, with `enrichedFields` listing them. Unit tests cover the merge rule (explicit-wins, schema-filter, `--map`, array `[0]`, ambiguous/empty find) without network.
+
+## Implementation notes (what shipped differs in four deliberate ways)
+
+The build (commit on main, CHANGELOG `[Unreleased]`) follows this design with these fixes found during planning:
+
+1. **Grammar precedence, not "contains `:`".** After splitting `<source>` at the first `:`, whichever of `:` / `?` appears first in the remainder decides the form. The id is verbatim after that first `:` (may contain `:`/`?`/`/`, covering CrossRef DOIs); the find value is verbatim after the first `=`. A bare contains-`:` rule would have misparsed `tmdb:movies?title=Mission: Impossible`.
+2. **Name-match excludes the target primary key and relation fields.** Every reference record carries its own `id` and every target schema has its PK in `fields`, so the literal step-3 rule would have written TMDB's `603` into a Directus autoincrement PK. The PK is never name-matched and `--map` onto it is a `VALIDATION` error; relation fields are skipped by name-match but reachable via explicit `--map`.
+3. **Find-form lookups re-fetch the full record by id.** Reference adapters return summary projections from `find` (no `externalIds`), which would have made `--map externalIds.*` silently no-op. The flow is `find(limit 2)` → cardinality check → `get(matched.id)`.
+4. **Smoke coverage is hermetic, not manual.** Instead of (only) the manual demo above, the Directus deep smoke (`npm run smoke:directus`) runs an enrichment section using the same local Directus as both target and configured `ref:` source — covering the second adapter instance, the `sources:` block with env interpolation, the merge rule, dry-run preview, idempotency interplay, and error attribution with zero external network dependence. Unit coverage lives in `packages/skeem/src/core/enrich.test.ts`.
+
+Also implemented as designed: raw `--enrich`/`--map` strings join the idempotency request shape (same key + different enrichment → `VALIDATION`) and the provenance `inputRefs`; `--dry-run` previews the merged payload (it still performs the source read); `update` rejects `--enrich` with `USAGE`. One pass-through edge: source error codes keep the source backend's semantics (Directus masks missing record ids as 403 → `AUTH`; reference adapters yield `NOT_FOUND`).

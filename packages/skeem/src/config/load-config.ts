@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import YAML from "yaml";
 
-import type { CliGlobalOptions, ResolvedConfig } from "../types/index.js";
+import type { CliGlobalOptions, ResolvedConfig, SourceConfigEntry } from "../types/index.js";
 
 interface RawConfig {
   adapter?: string;
@@ -18,6 +18,7 @@ interface RawConfig {
     exclude?: string[];
   };
   extensions?: Record<string, unknown>;
+  sources?: Record<string, SourceConfigEntry>;
   profiles?: Record<string, Omit<RawConfig, "profiles" | "default">>;
   default?: string;
   cache?: {
@@ -70,6 +71,7 @@ export async function loadConfig(startDir: string, cli: CliGlobalOptions): Promi
       exclude: resolved.schema?.exclude ?? ["directus_*"],
     },
     extensions: resolved.extensions ?? {},
+    sources: resolved.sources ?? {},
     cache: {
       ttlMs: resolved.cache?.ttl_ms ?? (resolved.cache?.ttl_seconds ? resolved.cache.ttl_seconds * 1000 : 60 * 60 * 1000),
     },
@@ -133,6 +135,10 @@ function mergeConfigs(base: RawConfig, override: RawConfig): RawConfig {
     extensions: {
       ...(base.extensions ?? {}),
       ...(override.extensions ?? {}),
+    },
+    sources: {
+      ...(base.sources ?? {}),
+      ...(override.sources ?? {}),
     },
     profiles: {
       ...(base.profiles ?? {}),

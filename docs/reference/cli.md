@@ -76,9 +76,9 @@ so a nested path like `a.b.c` only resolves the first hop.
 ## Data Writes
 
 ```bash
-skeem create <collection> [--field value]
+skeem create <collection> [--field value] [--enrich <spec>] [--map sourcePath=targetField]
 skeem update <collection> <id> [--field value]
-skeem upsert <collection> --match field=value [--field value]
+skeem upsert <collection> --match field=value [--field value] [--enrich <spec>] [--map sourcePath=targetField]
 skeem delete <collection> <id> [--hard]
 skeem restore <collection> <id>
 skeem link <collection:id> <related_collection:id>
@@ -93,6 +93,79 @@ Behavior highlights:
 - `--hard` bypasses trash.
 - `upsert` uses repeated `--match` flags for the lookup filter.
 - `link` and `unlink` handle both direct relation shorthand and explicit relation syntax.
+
+### Enrichment (`--enrich`)
+
+`create` and `upsert` can fold a record fetched from a second, read-only
+**source** adapter into the write payload. The source names an entry in the
+config `sources:` block (see the
+[configuration reference](configuration.md#sources-enrichment)); any registered
+adapter works as a source, but the read-tier reference adapters (wikidata,
+musicbrainz, osm, openlibrary, crossref, tmdb) are the intended ones.
+
+```bash
+skeem create movies --enrich tmdb:movies:603 --json
+skeem upsert movies --match imdb_id=tt0133093 --enrich "tmdb:movies?title=The Matrix" --json
+skeem create people --enrich wikidata:items:Q42 --map externalIds.viaf=viaf_id --json
+```
+
+Lookup grammar — one `--enrich` per call:
+
+- `<source>:<collection>:<id>` fetches by id. After the second `:`, the id is
+  taken verbatim, so ids may contain `:`, `?`, or `/` (CrossRef DOIs such as
+  `crossref:works:10.7554/elife.02181` work unquoted).
+- `<source>:<collection>?<field>=<value>` runs a single-equality `find` and
+  requires exactly one match: zero matches fails with `NOT_FOUND`
+  ("nothing to enrich from"), more than one with `AMBIGUOUS`. Values are taken
+  verbatim after the first `=` (they may contain `:`) and use the same scalar
+  coercion as `--where`. Whichever of `:` or `?` appears first after the source
+  name decides the form. The single match is re-fetched by id, because read
+  adapters return summary projections from `find` (no `externalIds`).
+
+Merge rule, in precedence order (highest wins):
+
+1. Explicit `--field` values and `--match` keys are never overwritten.
+2. `--map <sourcePath>=<targetField>` (repeatable) copies a dotted source path
+   onto a top-level target field. The target must exist in the target schema
+   and must not be the primary key (`VALIDATION` otherwise). A missing or
+   empty-array source path skips silently.
+3. Name-match fills every remaining target-schema field from a same-named
+   source value. The target collection's introspected schema is the filter, so
+   junk source fields never leak in. Name-match never touches the target
+   primary key or relation fields (use an explicit `--map` for those), and
+   skips `null` source values and objects aimed at non-json fields.
+
+Array-valued source paths (all `externalIds.*` values are arrays) take `[0]`
+onto scalar targets and land whole on `json`/`csv` targets.
+
+The success envelope reports what happened: `enrichedFrom: { source,
+collection, id }` and `enrichedFields: [names]`. The enrich spec also joins
+the provenance `inputRefs` and the idempotency request — replaying the same
+`--idempotency-key` with a different `--enrich`/`--map` fails request-shape
+validation. `--dry-run` previews the merged payload without writing (note: it
+still performs the source read). Source-side failures are attributed in the
+error message (`Enrichment source "tmdb": ...`) and in `error.details.enrich`.
+
+Edges to know:
+
+- On the upsert **update** path, enriched fields are included in the update
+  payload, so stored values the user didn't set are overwritten from the
+  source — that is the sync-from-source intent.
+- `update` does not support `--enrich` (rejected with `USAGE`).
+- Source error codes pass through the backend's semantics: reference adapters
+  yield `NOT_FOUND` for a missing id, while Directus masks missing records as
+  403, so a Directus source surfaces that case as `AUTH`.
+
+Enrichment is sugar, not a requirement — the zero-config alternative composes
+two invocations with pipes:
+
+```bash
+tmdb=$(skeem get movies 603 --adapter tmdb --url https://api.themoviedb.org/3 --token "$TMDB" --json)
+skeem create movies --json \
+  --title    "$(jq -r .data.title                    <<<"$tmdb")" \
+  --released "$(jq -r .data.release_date             <<<"$tmdb")" \
+  --imdb_id  "$(jq -r '.data.externalIds.imdb[0]'    <<<"$tmdb")"
+```
 
 ## Schema Management
 

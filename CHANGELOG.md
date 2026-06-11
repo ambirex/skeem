@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Cross-adapter enrichment (`--enrich`)** on `create` and `upsert`: fold a
+  record from a configured read-only source adapter into the write payload.
+  `--enrich <source>:<collection>:<id>` fetches by id (ids verbatim after the
+  second `:`, so colon-bearing DOIs work); `--enrich
+  "<source>:<collection>?<field>=<value>"` finds exactly one match (0 →
+  `NOT_FOUND`, >1 → `AMBIGUOUS`) and re-fetches it in full. Explicit
+  `--field`/`--match` values always win; the target collection's introspected
+  schema filters name-matched fields (never the primary key or relation
+  fields); `--map sourcePath=targetField` (repeatable) maps dotted paths such
+  as `externalIds.imdb`, taking `[0]` of arrays onto scalar fields. Sources
+  live in a new `sources:` config block (per-name merge, `${ENV}`
+  interpolation, lazily connected). The success envelope gains
+  `enrichedFrom`/`enrichedFields`; the enrich spec joins provenance
+  `inputRefs` and the idempotency request shape; `--dry-run` previews the
+  merged payload. Source failures are attributed
+  (`Enrichment source "name": …`, `error.details.enrich`). Covered by
+  `enrich.test.ts` and an end-to-end section in the Directus deep smoke
+  (Directus as both target and `ref:` source). Design:
+  `docs/proposals/cross-adapter-enrichment.md`.
+
 - **TMDB adapter** (`@skeems/tmdb`), read tier: `movies`, `tv`, `people` keyed
   by TMDB id. The only read-tier adapter requiring auth — one
   `connection.token` covers both schemes (v4 Read Access Token → Bearer; v3

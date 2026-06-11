@@ -1,6 +1,6 @@
 ---
 name: skeem
-description: Use when reading or writing relational data in a headless backend (Directus, PocketBase, NocoDB, Strapi) or querying public reference datasets (WikiData, MusicBrainz, OpenStreetMap, Open Library, CrossRef, TMDB) through the `skeem` CLI. Covers the JSON envelope contract, the discovery-first workflow, the relation grammar (@id / ?field=value / ??field=value), the coordination primitives (claims, idempotency, provenance, trash) that make multi-step writes safe, and pivoting between reference datasets via shared external IDs.
+description: Use when reading or writing relational data in a headless backend (Directus, PocketBase, NocoDB, Strapi) or querying public reference datasets (WikiData, MusicBrainz, OpenStreetMap, Open Library, CrossRef, TMDB) through the `skeem` CLI. Covers the JSON envelope contract, the discovery-first workflow, the relation grammar (@id / ?field=value / ??field=value), the coordination primitives (claims, idempotency, provenance, trash) that make multi-step writes safe, pivoting between reference datasets via shared external IDs, and enriching writes from a reference source (--enrich).
 ---
 
 # Driving skeem as an agent
@@ -161,6 +161,17 @@ skeem find items --where imdb=tt0133093 --adapter wikidata --json   # any curate
 skeem find movies --where imdb=tt0133093 --adapter tmdb --json
 skeem find works --where orcid=0000-0002-1641-3403 --adapter crossref --json
 skeem find editions --where isbn=9780345391803 --adapter openlibrary --json
+```
+
+To fold a reference record into a write in one step, use `--enrich` on
+`create`/`upsert` with a `sources:` block in `.skeemrc.yaml`
+(`docs/reference/cli.md#enrichment---enrich`). Your explicit `--field`/`--match`
+values always win; the target schema filters everything else; `--map` renames
+dotted paths (arrays take `[0]` onto scalar fields):
+
+```bash
+skeem create movies --enrich tmdb:movies:603 --map externalIds.imdb=imdb_id --json
+# envelope reports enrichedFrom + enrichedFields; --dry-run previews the merge
 ```
 
 Etiquette: the MusicBrainz/Nominatim clients throttle to ~1 req/s **per

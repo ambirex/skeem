@@ -20,6 +20,8 @@ const defineDestructivePath = path.join(fixtureRoot, "schema-define-destructive.
 const configWorkspaceDir = path.join(fixtureRoot, "config-workspace");
 const configNestedDir = path.join(configWorkspaceDir, "nested", "child");
 const configPath = path.join(configWorkspaceDir, ".skeemrc.yaml");
+const enrichWorkspaceDir = path.join(fixtureRoot, "enrich-workspace");
+const enrichConfigPath = path.join(enrichWorkspaceDir, ".skeemrc.yaml");
 
 const directusVersion = "11.17.1";
 const sqliteVersion = "6.0.1";
@@ -66,6 +68,24 @@ try {
     collectionMany: "people",
     fieldMany: "company_id",
     collectionOne: "companies",
+  });
+  await ensureCollection({
+    name: "ref_movies",
+    fields: [
+      stringField("title"),
+      stringField("release_date"),
+      stringField("overview"),
+      jsonField("external"),
+    ],
+  });
+  await ensureCollection({
+    name: "movies",
+    fields: [
+      stringField("title"),
+      stringField("release_date"),
+      stringField("overview"),
+      stringField("imdb_id"),
+    ],
   });
   await clearSkeemCache();
   await rm(discoverOutputPath, { force: true });
@@ -1769,6 +1789,197 @@ try {
     throw new Error(`--no-cache should not write cache files:\n${JSON.stringify(configCacheAfterNoCache, null, 2)}`);
   }
 
+  // Cross-adapter enrichment (--enrich): the same Directus serves as both the
+  // write target and the configured "ref" source, exercising the second
+  // adapter instance, the sources: block (incl. env interpolation), the merge
+  // rule, and the envelope keys without any external network dependence.
+  await prepareEnrichWorkspace();
+  await clearCacheAt(enrichWorkspaceDir);
+
+  const runEnrich = (args, options = {}) => runSkeemJson(args, {
+    ...options,
+    cwd: enrichWorkspaceDir,
+    skipConnectionFlags: true,
+    env: {
+      SKEEM_SMOKE_TOKEN: adminToken,
+      ...(options.env ?? {}),
+    },
+  });
+
+  const refSeed = await createItemDirect("ref_movies", {
+    title: "Enrich Movie",
+    release_date: "1999-03-30",
+    overview: "Reference overview.",
+    external: { imdb: ["tt0133093"], empty: [] },
+  });
+  const refSeedId = refSeed.id;
+
+  const enrichCreate = await runEnrich([
+    "create", "movies",
+    "--title", "User Title",
+    "--enrich", `ref:ref_movies:${refSeedId}`,
+    "--map", "external.imdb=imdb_id",
+  ]);
+  if (!enrichCreate.ok || enrichCreate.data?.title !== "User Title") {
+    throw new Error(`Enriched create should keep the user-set title:\n${JSON.stringify(enrichCreate, null, 2)}`);
+  }
+  if (enrichCreate.data?.release_date !== "1999-03-30" || enrichCreate.data?.overview !== "Reference overview.") {
+    throw new Error(`Enriched create should fill unset fields from the source:\n${JSON.stringify(enrichCreate, null, 2)}`);
+  }
+  if (enrichCreate.data?.imdb_id !== "tt0133093") {
+    throw new Error(`--map external.imdb=imdb_id should take the first array entry:\n${JSON.stringify(enrichCreate, null, 2)}`);
+  }
+  if (
+    enrichCreate.enrichedFrom?.source !== "ref" ||
+    enrichCreate.enrichedFrom?.collection !== "ref_movies" ||
+    enrichCreate.enrichedFrom?.id !== refSeedId ||
+    JSON.stringify(enrichCreate.enrichedFields) !== JSON.stringify(["imdb_id", "overview", "release_date"])
+  ) {
+    throw new Error(`Enriched create envelope should report enrichedFrom/enrichedFields:\n${JSON.stringify(enrichCreate, null, 2)}`);
+  }
+
+  const enrichStored = await runEnrich(["get", "movies", String(enrichCreate.data.id)]);
+  if (!enrichStored.ok || enrichStored.data?.imdb_id !== "tt0133093" || enrichStored.data?.title !== "User Title") {
+    throw new Error(`Enriched create should persist merged values:\n${JSON.stringify(enrichStored, null, 2)}`);
+  }
+
+  const enrichFindForm = await runEnrich(["create", "movies", "--enrich", "ref:ref_movies?title=Enrich Movie"]);
+  if (!enrichFindForm.ok || enrichFindForm.data?.title !== "Enrich Movie" || enrichFindForm.enrichedFrom?.id !== refSeedId) {
+    throw new Error(`Find-form enrichment should resolve the single match:\n${JSON.stringify(enrichFindForm, null, 2)}`);
+  }
+
+  const moviesBeforeDryRun = await runEnrich(["find", "movies"]);
+  const enrichDryRun = await runEnrich([
+    "create", "movies", "--dry-run",
+    "--enrich", `ref:ref_movies:${refSeedId}`,
+    "--map", "external.imdb=imdb_id",
+  ]);
+  if (!enrichDryRun.ok || enrichDryRun.operation !== "dry_run") {
+    throw new Error(`Enriched dry-run failed:\n${JSON.stringify(enrichDryRun, null, 2)}`);
+  }
+  const enrichDryRunRoot = enrichDryRun.plan?.find((entry) => entry.ref === "root");
+  if (enrichDryRunRoot?.data?.imdb_id !== "tt0133093" || enrichDryRunRoot?.data?.overview !== "Reference overview.") {
+    throw new Error(`Enriched dry-run should preview the merged payload:\n${JSON.stringify(enrichDryRun, null, 2)}`);
+  }
+  if (enrichDryRun.enrichedFrom?.source !== "ref" || !enrichDryRun.enrichedFields?.includes("imdb_id")) {
+    throw new Error(`Enriched dry-run should report enrichment keys:\n${JSON.stringify(enrichDryRun, null, 2)}`);
+  }
+  const moviesAfterDryRun = await runEnrich(["find", "movies"]);
+  if (moviesAfterDryRun.count !== moviesBeforeDryRun.count) {
+    throw new Error(`Enriched dry-run must not write records:\n${JSON.stringify(moviesAfterDryRun, null, 2)}`);
+  }
+
+  const enrichUpsertCreate = await runEnrich([
+    "upsert", "movies",
+    "--match", "imdb_id=tt9999999",
+    "--enrich", `ref:ref_movies:${refSeedId}`,
+    "--map", "external.imdb=imdb_id",
+  ]);
+  if (!enrichUpsertCreate.ok || enrichUpsertCreate.action !== "created") {
+    throw new Error(`Enriched upsert should create when nothing matches:\n${JSON.stringify(enrichUpsertCreate, null, 2)}`);
+  }
+  if (enrichUpsertCreate.data?.imdb_id !== "tt9999999" || enrichUpsertCreate.enrichedFields?.includes("imdb_id")) {
+    throw new Error(`--match must win over --map on the upsert create branch:\n${JSON.stringify(enrichUpsertCreate, null, 2)}`);
+  }
+  if (enrichUpsertCreate.data?.overview !== "Reference overview.") {
+    throw new Error(`Enriched upsert create should fill unset fields:\n${JSON.stringify(enrichUpsertCreate, null, 2)}`);
+  }
+
+  const upsertMovieId = enrichUpsertCreate.data.id;
+  const enrichHandEdit = await runEnrich(["update", "movies", String(upsertMovieId), "--overview", "Hand edited."]);
+  if (!enrichHandEdit.ok) {
+    throw new Error(`Hand edit before enriched upsert failed:\n${JSON.stringify(enrichHandEdit, null, 2)}`);
+  }
+  const enrichUpsertUpdate = await runEnrich([
+    "upsert", "movies",
+    "--match", "imdb_id=tt9999999",
+    "--enrich", `ref:ref_movies:${refSeedId}`,
+  ]);
+  if (!enrichUpsertUpdate.ok || enrichUpsertUpdate.action !== "updated") {
+    throw new Error(`Enriched upsert should update the matched record:\n${JSON.stringify(enrichUpsertUpdate, null, 2)}`);
+  }
+  if (enrichUpsertUpdate.data?.overview !== "Reference overview." || !enrichUpsertUpdate.enrichedFields?.includes("overview")) {
+    throw new Error(`Enriched upsert update should sync unset fields from the source (stored-overwrite edge):\n${JSON.stringify(enrichUpsertUpdate, null, 2)}`);
+  }
+
+  await createItemDirect("ref_movies", { title: "Enrich Movie", overview: "Duplicate." });
+  const enrichAmbiguous = await runEnrich(
+    ["create", "movies", "--enrich", "ref:ref_movies?title=Enrich Movie"],
+    { expectFailure: true },
+  );
+  if (enrichAmbiguous.ok || enrichAmbiguous.error?.code !== "AMBIGUOUS") {
+    throw new Error(`Find-form enrichment should reject multiple matches:\n${JSON.stringify(enrichAmbiguous, null, 2)}`);
+  }
+
+  const enrichNoMatch = await runEnrich(
+    ["create", "movies", "--enrich", "ref:ref_movies?title=No Such Movie"],
+    { expectFailure: true },
+  );
+  if (enrichNoMatch.ok || enrichNoMatch.error?.code !== "NOT_FOUND" || !/nothing to enrich from/.test(enrichNoMatch.error?.message ?? "")) {
+    throw new Error(`Find-form enrichment should reject zero matches:\n${JSON.stringify(enrichNoMatch, null, 2)}`);
+  }
+
+  // Directus masks missing record ids as 403, so a Directus source surfaces
+  // this as an attributed AUTH error rather than NOT_FOUND (reference adapters
+  // yield NOT_FOUND here). The contract under test is the source attribution.
+  const enrichMissingId = await runEnrich(
+    ["create", "movies", "--enrich", "ref:ref_movies:999999"],
+    { expectFailure: true },
+  );
+  if (enrichMissingId.ok || !/Enrichment source "ref"/.test(enrichMissingId.error?.message ?? "")) {
+    throw new Error(`Id-form enrichment should attribute source failures:\n${JSON.stringify(enrichMissingId, null, 2)}`);
+  }
+
+  const enrichUnknownSource = await runEnrich(
+    ["create", "movies", "--enrich", "nosuch:x:1"],
+    { expectFailure: true },
+  );
+  if (enrichUnknownSource.ok || enrichUnknownSource.error?.code !== "USAGE" || !/Configured sources: ref/.test(enrichUnknownSource.error?.message ?? "")) {
+    throw new Error(`Unknown source should list configured sources:\n${JSON.stringify(enrichUnknownSource, null, 2)}`);
+  }
+
+  const enrichBadCollection = await runEnrich(
+    ["create", "movies", "--enrich", "ref:nope:1"],
+    { expectFailure: true },
+  );
+  if (enrichBadCollection.ok || !/(Enrichment source "ref"|nothing to enrich from)/.test(enrichBadCollection.error?.message ?? "")) {
+    throw new Error(`Source-side failures should be attributed to the source:\n${JSON.stringify(enrichBadCollection, null, 2)}`);
+  }
+
+  const enrichIdemArgs = [
+    "create", "movies",
+    "--idempotency-key", "smoke-enrich-1",
+    "--enrich", `ref:ref_movies:${refSeedId}`,
+    "--map", "external.imdb=imdb_id",
+  ];
+  const enrichIdemFirst = await runEnrich(enrichIdemArgs);
+  if (!enrichIdemFirst.ok || !enrichIdemFirst.enrichedFields?.includes("imdb_id")) {
+    throw new Error(`Enriched idempotent create failed:\n${JSON.stringify(enrichIdemFirst, null, 2)}`);
+  }
+  const enrichIdemReplay = await runEnrich(enrichIdemArgs);
+  if (
+    !enrichIdemReplay.ok ||
+    enrichIdemReplay.data?.id !== enrichIdemFirst.data?.id ||
+    JSON.stringify(enrichIdemReplay.enrichedFields) !== JSON.stringify(enrichIdemFirst.enrichedFields)
+  ) {
+    throw new Error(`Enriched idempotent replay should return the stored envelope:\n${JSON.stringify(enrichIdemReplay, null, 2)}`);
+  }
+  const enrichIdemMismatch = await runEnrich(
+    ["create", "movies", "--idempotency-key", "smoke-enrich-1", "--enrich", `ref:ref_movies:${refSeedId}`],
+    { expectFailure: true },
+  );
+  if (enrichIdemMismatch.ok || enrichIdemMismatch.error?.code !== "VALIDATION") {
+    throw new Error(`Same key with different enrichment should be rejected:\n${JSON.stringify(enrichIdemMismatch, null, 2)}`);
+  }
+
+  const enrichOnUpdate = await runEnrich(
+    ["update", "movies", String(upsertMovieId), "--enrich", `ref:ref_movies:${refSeedId}`],
+    { expectFailure: true },
+  );
+  if (enrichOnUpdate.ok || enrichOnUpdate.error?.code !== "USAGE" || !/create and upsert only/.test(enrichOnUpdate.error?.message ?? "")) {
+    throw new Error(`update --enrich should be rejected:\n${JSON.stringify(enrichOnUpdate, null, 2)}`);
+  }
+
   process.stdout.write(
     `${JSON.stringify(
       {
@@ -1847,6 +2058,17 @@ try {
           cacheHit: true,
           cacheRefresh: true,
           cacheNoCache: true,
+          enrichCreate: true,
+          enrichCreateStored: true,
+          enrichFindForm: true,
+          enrichDryRun: true,
+          enrichUpsertCreate: true,
+          enrichUpsertUpdate: true,
+          enrichAmbiguous: true,
+          enrichNotFound: true,
+          enrichSourceAttribution: true,
+          enrichIdempotency: true,
+          enrichUpdateRejected: true,
         },
         widgetId,
       },
@@ -2087,6 +2309,46 @@ async function prepareConfigWorkspace() {
       "        org: companies",
     ].join("\n"),
   );
+}
+
+async function prepareEnrichWorkspace() {
+  await mkdir(enrichWorkspaceDir, { recursive: true });
+  await writeFile(
+    enrichConfigPath,
+    [
+      "adapter: directus",
+      "cache:",
+      "  ttl_ms: 600000",
+      "connection:",
+      `  url: \"${baseUrl}\"`,
+      "  token: \"${SKEEM_SMOKE_TOKEN}\"",
+      "sources:",
+      "  ref:",
+      "    adapter: directus",
+      "    connection:",
+      `      url: \"${baseUrl}\"`,
+      "      token: \"${SKEEM_SMOKE_TOKEN}\"",
+    ].join("\n"),
+  );
+}
+
+async function createItemDirect(collection, payload) {
+  const response = await fetch(`${baseUrl}/items/${collection}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Failed to seed "${collection}":\n${body}`);
+  }
+
+  return (await response.json()).data;
 }
 
 async function stopExistingDirectus(child) {
@@ -2331,6 +2593,22 @@ function integerField(name, options = {}) {
       name,
       data_type: "integer",
       is_nullable: options.required ? false : true,
+    },
+  };
+}
+
+function jsonField(name) {
+  return {
+    field: name,
+    type: "json",
+    meta: {
+      interface: "input-code",
+      width: "full",
+    },
+    schema: {
+      name,
+      data_type: "json",
+      is_nullable: true,
     },
   };
 }

@@ -1,6 +1,7 @@
 import { toErrorEnvelope, writeEnvelope } from "../output/formatter.js";
 import { UsageError } from "../errors/index.js";
 import { SkeemRuntime, parseWhere, readExecPlanFromStdin } from "../core/runtime.js";
+import type { EnrichInput } from "../core/enrich.js";
 import type { CliGlobalOptions } from "../types/index.js";
 
 interface ParsedArgs {
@@ -159,8 +160,15 @@ export async function runCli(argv: string[]): Promise<void> {
         if (!collection) {
           throw new UsageError("Usage: skeem upsert <collection> --match field=value [--field value]");
         }
+        const enrich = readEnrichInput(parsed);
         writeEnvelope(
-          await runtime.upsert(collection, parseWhere(parsed.flags.get("match") ?? []), extractFieldEntries(parsed, new Set(["match"])), cli),
+          await runtime.upsert(
+            collection,
+            parseWhere(parsed.flags.get("match") ?? []),
+            extractFieldEntries(parsed, new Set(["match"])),
+            cli,
+            enrich ? { enrich } : undefined,
+          ),
           { json },
         );
         return;
@@ -170,7 +178,11 @@ export async function runCli(argv: string[]): Promise<void> {
         if (!collection) {
           throw new UsageError("Usage: skeem create <collection> [--field value]");
         }
-        writeEnvelope(await runtime.create(collection, extractFieldEntries(parsed, new Set()), cli), { json });
+        const enrich = readEnrichInput(parsed);
+        writeEnvelope(
+          await runtime.create(collection, extractFieldEntries(parsed, new Set()), cli, enrich ? { enrich } : undefined),
+          { json },
+        );
         return;
       }
       case "update": {
@@ -178,6 +190,7 @@ export async function runCli(argv: string[]): Promise<void> {
         if (!collection || id === undefined) {
           throw new UsageError("Usage: skeem update <collection> <id> [--field value]");
         }
+        rejectEnrichFlags(parsed);
         writeEnvelope(await runtime.update(collection, parsePrimaryKey(id), extractFieldEntries(parsed, new Set()), cli), { json });
         return;
       }
@@ -401,6 +414,8 @@ function extractFieldEntries(parsed: ParsedArgs, additionalKnownFlags: Set<strin
     ...GLOBAL_VALUE_FLAGS,
     "where",
     "match",
+    "enrich",
+    "map",
     "output",
     "limit",
     "offset",
@@ -425,6 +440,38 @@ function appendFlag(flags: Map<string, string[]>, name: string, value: string): 
   const existing = flags.get(name) ?? [];
   existing.push(value);
   flags.set(name, existing);
+}
+
+const ENRICH_USAGE = '--enrich expects "<source>:<collection>:<id>" or "<source>:<collection>?<field>=<value>".';
+
+function readEnrichInput(parsed: ParsedArgs): EnrichInput | undefined {
+  if (parsed.booleans.has("enrich")) {
+    throw new UsageError(`--enrich requires a value. ${ENRICH_USAGE}`);
+  }
+  if (parsed.booleans.has("map")) {
+    throw new UsageError('--map requires a value. Expected "--map <sourcePath>=<targetField>".');
+  }
+
+  const specs = parsed.flags.get("enrich") ?? [];
+  const map = parsed.flags.get("map") ?? [];
+
+  if (specs.length === 0) {
+    if (map.length > 0) {
+      throw new UsageError("--map requires --enrich.");
+    }
+    return undefined;
+  }
+  if (specs.length > 1) {
+    throw new UsageError("Use one --enrich per call; enrichment supports a single source.");
+  }
+
+  return { spec: specs[0]!, map };
+}
+
+function rejectEnrichFlags(parsed: ParsedArgs): void {
+  if (parsed.flags.has("enrich") || parsed.flags.has("map") || parsed.booleans.has("enrich") || parsed.booleans.has("map")) {
+    throw new UsageError("--enrich and --map are supported on create and upsert only.");
+  }
 }
 
 function parsePrimaryKey(value: string): string | number {
@@ -470,8 +517,8 @@ function helpText(): string {
     "  skeem init [--status]",
     "  skeem get <collection> <id> [--expand relation]",
     "  skeem find <collection> [--where field=value] [--limit N] [--offset N] [--sort field]",
-    "  skeem upsert <collection> --match field=value [--field value]",
-    "  skeem create <collection> [--field value]",
+    "  skeem upsert <collection> --match field=value [--field value] [--enrich source:collection:id] [--map sourcePath=targetField]",
+    "  skeem create <collection> [--field value] [--enrich source:collection:id | \"source:collection?field=value\"] [--map sourcePath=targetField]",
     "  skeem update <collection> <id> [--field value]",
     "  skeem delete <collection> <id> [--hard]",
     "  skeem restore <collection> <id>",

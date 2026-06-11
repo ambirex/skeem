@@ -40,6 +40,13 @@ profiles:
       url: http://127.0.0.1:8055
       token: ${DIRECTUS_TOKEN}
 
+sources:
+  tmdb:
+    adapter: tmdb
+    connection:
+      url: https://api.themoviedb.org/3
+      token: ${TMDB_TOKEN}
+
 schema:
   aliases:
     person: people
@@ -55,6 +62,7 @@ Top-level fields:
 - `default`: default profile name
 - `actor`: default actor used by claim, annotation, provenance, and related workflows
 - `profiles`: named profile map
+- `sources`: named source connections for `--enrich` (see below)
 - `schema.aliases`: collection-name aliases used during CLI resolution
 - `schema.exclude`: collection globs or names filtered out of schema-facing commands
 - `cache.ttl_seconds` or `cache.ttl_ms`: schema cache TTL
@@ -127,7 +135,44 @@ Adapter-specific behavior and limitations are documented in each package's
 README (for example, PocketBase and NocoDB introspect many-to-many relations but
 do not support record-level `link`/`unlink` over them).
 
-## Environment Variables
+## Sources (enrichment)
+
+The `sources:` block names reusable, secondary connections for
+[`--enrich`](cli.md#enrichment---enrich) on `create` and `upsert`. Each entry
+is a mini adapter config — the same `adapter` + `connection` shape as the
+primary backend:
+
+```yaml
+adapter: directus
+connection:
+  url: http://127.0.0.1:8055
+  token: ${DIRECTUS_TOKEN}
+
+sources:
+  tmdb:
+    adapter: tmdb
+    connection:
+      url: https://api.themoviedb.org/3
+      token: ${TMDB_TOKEN}
+  wikidata:
+    adapter: wikidata
+    connection:
+      url: https://www.wikidata.org
+```
+
+Behavior:
+
+- The source name is what `--enrich <source>:...` references — it does not have
+  to match the adapter name. Most reference adapters need no auth; only TMDB
+  requires a token.
+- Sources are **lazy**: nothing is validated or connected until a command
+  actually names one, so a broken entry never breaks unrelated commands.
+- Merging is per name, mirroring `profiles`: a local or profile entry with the
+  same name replaces the global entry wholesale, and entries from different
+  scopes accumulate. Profiles may define their own `sources`.
+- `${ENV_VAR}` interpolation applies as everywhere else in the config. Note
+  that a missing environment variable interpolates to an empty string, which
+  surfaces later as a source-attributed auth error.
 
 Supported env overrides:
 

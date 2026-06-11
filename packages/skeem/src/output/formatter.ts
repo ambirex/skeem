@@ -157,7 +157,10 @@ function renderHuman(envelope: SuccessEnvelope | ErrorEnvelope): string {
 
   if (envelope.operation === "upsert") {
     const verb = envelope.action === "created" ? "Created" : "Updated";
-    return `${verb} record in ${envelope.collection}.`;
+    const enriched = envelope.enrichedFields?.length
+      ? ` (enriched ${envelope.enrichedFields.length} field${envelope.enrichedFields.length === 1 ? "" : "s"} from ${envelope.enrichedFrom?.source ?? "source"})`
+      : "";
+    return `${verb} record in ${envelope.collection}.${enriched}`;
   }
 
   if ((envelope.operation === "link" || envelope.operation === "unlink") && envelope.data && typeof envelope.data === "object") {

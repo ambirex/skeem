@@ -11,6 +11,7 @@ import {
   AuthError,
   DuplicateError,
   NotFoundError,
+  SkemError,
   UsageError,
   ValidationError,
 } from "../errors/index.js";
@@ -39,6 +40,16 @@ import {
   parseRecordReference,
   resolveUpsertDecision,
 } from "./data-verbs.js";
+import {
+  applyEnrichment,
+  enrichErrorDetails,
+  parseEnrichSpec,
+  parseMapEntries,
+  pickEnrichmentMatch,
+  resolveSourceEntry,
+  type EnrichInput,
+  type ParsedEnrichSpec,
+} from "./enrich.js";
 import { attachIdempotencyMetadata, extractIdempotencyMetadata, idempotencyRequestsMatch, type IdempotencyRequest } from "./idempotency.js";
 import { isClaimActive, leaseUntilFromDuration, parseLeaseDuration, resolveClaimActor } from "./claims.js";
 import { getAliasLookupCandidate, normalizeAlias } from "./identity.js";
@@ -97,6 +108,19 @@ interface LinkTargetResolution {
   collection: Collection;
   id: PrimaryKey;
   record?: EntityRecord;
+}
+
+interface WriteEnrichOptions {
+  enrich?: EnrichInput;
+}
+
+interface ResolvedEnrichment {
+  record: EntityRecord;
+  from: {
+    source: string;
+    collection: string;
+    id: PrimaryKey;
+  };
 }
 
 const ALIAS_COLLECTION = "skeem_aliases";
@@ -402,12 +426,23 @@ export class SkeemRuntime {
     }
   }
 
-  async create(collectionInput: string, fieldEntries: Array<[string, string]>, cli: CliGlobalOptions): Promise<SuccessEnvelope> {
+  async create(
+    collectionInput: string,
+    fieldEntries: Array<[string, string]>,
+    cli: CliGlobalOptions,
+    options?: WriteEnrichOptions,
+  ): Promise<SuccessEnvelope> {
     const schema = await this.loadSchemaForData(cli);
     const collection = this.resolveCollection(schema, collectionInput);
-    const node = buildInputNode(fieldEntries, collection.name);
+    let node = buildInputNode(fieldEntries, collection.name);
+    const enrichSpec = options?.enrich ? parseEnrichSpec(options.enrich.spec) : undefined;
+    const enrichMaps = options?.enrich ? parseMapEntries(options.enrich.map) : [];
+    const enrichInputRefs = options?.enrich
+      ? { enrich: { spec: options.enrich.spec, map: options.enrich.map } }
+      : {};
     const request = this.buildIdempotencyRequest("create", collection.name, {
       fields: this.fieldEntriesToObject(fieldEntries),
+      ...enrichInputRefs,
     });
 
     const replay = await this.maybeReplayIdempotentWrite(cli, request);
@@ -415,11 +450,20 @@ export class SkeemRuntime {
       return replay;
     }
 
+    let enrichEnvelopeKeys: Pick<SuccessEnvelope, "enrichedFrom" | "enrichedFields"> = {};
+    if (enrichSpec) {
+      const enrichment = await this.resolveEnrichment(enrichSpec);
+      const applied = applyEnrichment({ node, record: enrichment.record, collection, maps: enrichMaps });
+      node = applied.node;
+      enrichEnvelopeKeys = { enrichedFrom: enrichment.from, enrichedFields: applied.enrichedFields };
+    }
+
     if (cli.dryRun) {
       return toSuccessEnvelope({
         operation: "dry_run",
         collection: collection.name,
         plan: this.previewCreate(schema, collection, node, ["root"]),
+        ...enrichEnvelopeKeys,
       });
     }
 
@@ -430,6 +474,7 @@ export class SkeemRuntime {
           operation: "create",
           inputRefs: {
             fields: this.fieldEntriesToObject(fieldEntries),
+            ...enrichInputRefs,
           },
         },
       });
@@ -438,12 +483,14 @@ export class SkeemRuntime {
         collection: collection.name,
         data: result.record,
         plan: result.plan,
+        ...enrichEnvelopeKeys,
       });
       await this.persistIdempotentReplay(
         cli,
         request,
         {
           fields: this.fieldEntriesToObject(fieldEntries),
+          ...enrichInputRefs,
         },
         envelope,
         this.recordPrimaryKey(collection, result.record),
@@ -921,6 +968,7 @@ export class SkeemRuntime {
     match: Filter,
     fieldEntries: Array<[string, string]>,
     cli: CliGlobalOptions,
+    options?: WriteEnrichOptions,
   ): Promise<SuccessEnvelope> {
     if (Object.keys(match).length === 0) {
       throw new UsageError("Usage: skeem upsert <collection> --match field=value [--field value]");
@@ -929,9 +977,15 @@ export class SkeemRuntime {
     const schema = await this.loadSchemaForData(cli);
     const collection = this.resolveCollection(schema, collectionInput);
     const node = buildInputNode(fieldEntries, collection.name);
+    const enrichSpec = options?.enrich ? parseEnrichSpec(options.enrich.spec) : undefined;
+    const enrichMaps = options?.enrich ? parseMapEntries(options.enrich.map) : [];
+    const enrichInputRefs = options?.enrich
+      ? { enrich: { spec: options.enrich.spec, map: options.enrich.map } }
+      : {};
     const request = this.buildIdempotencyRequest("upsert", collection.name, {
       match,
       fields: this.fieldEntriesToObject(fieldEntries),
+      ...enrichInputRefs,
     });
     let decision: ReturnType<typeof resolveUpsertDecision>;
 
@@ -947,8 +1001,19 @@ export class SkeemRuntime {
       throw this.normalizeError(error, collection.name);
     }
 
+    // Both branches share one source fetch; target-side match errors surface first.
+    const enrichment = enrichSpec ? await this.resolveEnrichment(enrichSpec) : undefined;
+
     if (decision.kind === "create") {
-      const createNode = mergeUpsertCreateNode(node, match, collection.name);
+      // Enrich after the match merge so match keys sit in fields and win over
+      // source values instead of tripping the merge-conflict ValidationError.
+      let createNode = mergeUpsertCreateNode(node, match, collection.name);
+      let enrichEnvelopeKeys: Pick<SuccessEnvelope, "enrichedFrom" | "enrichedFields"> = {};
+      if (enrichment) {
+        const applied = applyEnrichment({ node: createNode, record: enrichment.record, collection, maps: enrichMaps });
+        createNode = applied.node;
+        enrichEnvelopeKeys = { enrichedFrom: enrichment.from, enrichedFields: applied.enrichedFields };
+      }
 
       if (cli.dryRun) {
         return toSuccessEnvelope({
@@ -960,6 +1025,7 @@ export class SkeemRuntime {
             match,
           },
           plan: this.previewCreate(schema, collection, createNode, ["root"]),
+          ...enrichEnvelopeKeys,
         });
       }
 
@@ -972,6 +1038,7 @@ export class SkeemRuntime {
               action: "created",
               match,
               fields: this.fieldEntriesToObject(fieldEntries),
+              ...enrichInputRefs,
             },
           },
         });
@@ -981,6 +1048,7 @@ export class SkeemRuntime {
           collection: collection.name,
           data: result.record,
           plan: result.plan,
+          ...enrichEnvelopeKeys,
         });
         await this.persistIdempotentReplay(
           cli,
@@ -989,6 +1057,7 @@ export class SkeemRuntime {
             action: "created",
             match,
             fields: this.fieldEntriesToObject(fieldEntries),
+            ...enrichInputRefs,
           },
           envelope,
           this.recordPrimaryKey(collection, result.record),
@@ -1003,6 +1072,21 @@ export class SkeemRuntime {
     }
 
     const id = this.recordPrimaryKey(collection, decision.record);
+    let updateInputNode = node;
+    let enrichEnvelopeKeys: Pick<SuccessEnvelope, "enrichedFrom" | "enrichedFields"> = {};
+    if (enrichment) {
+      // Match keys are reserved rather than merged on the update path, so
+      // enrichment can never touch them.
+      const applied = applyEnrichment({
+        node,
+        record: enrichment.record,
+        collection,
+        maps: enrichMaps,
+        reserved: new Set(Object.keys(match)),
+      });
+      updateInputNode = applied.node;
+      enrichEnvelopeKeys = { enrichedFrom: enrichment.from, enrichedFields: applied.enrichedFields };
+    }
 
     if (cli.dryRun) {
       return toSuccessEnvelope({
@@ -1014,12 +1098,13 @@ export class SkeemRuntime {
           id,
           match,
         },
-        plan: this.previewUpdate(schema, collection, id, node, ["root"]),
+        plan: this.previewUpdate(schema, collection, id, updateInputNode, ["root"]),
+        ...enrichEnvelopeKeys,
       });
     }
 
     try {
-      const result = await this.updateNode(schema, collection, id, node, ["root"], {
+      const result = await this.updateNode(schema, collection, id, updateInputNode, ["root"], {
         cli,
         previousRecord: decision.record,
         provenance: {
@@ -1029,6 +1114,7 @@ export class SkeemRuntime {
             id,
             match,
             fields: this.fieldEntriesToObject(fieldEntries),
+            ...enrichInputRefs,
           },
         },
       });
@@ -1038,6 +1124,7 @@ export class SkeemRuntime {
         collection: collection.name,
         data: result.record,
         plan: result.plan,
+        ...enrichEnvelopeKeys,
       });
       await this.persistIdempotentReplay(
         cli,
@@ -1047,6 +1134,7 @@ export class SkeemRuntime {
           id,
           match,
           fields: this.fieldEntriesToObject(fieldEntries),
+          ...enrichInputRefs,
         },
         envelope,
         this.recordPrimaryKey(collection, result.record),
@@ -1901,6 +1989,73 @@ export class SkeemRuntime {
     });
 
     return plan;
+  }
+
+  /**
+   * Fetch the enrichment record from a configured source. The source adapter
+   * is instantiated only here (never eagerly) and never introspected — the
+   * spec's collection name goes straight to its get/find. Find-form lookups
+   * re-fetch the single match by id because read adapters return summary
+   * projections from find (no externalIds and similar).
+   */
+  private async resolveEnrichment(spec: ParsedEnrichSpec): Promise<ResolvedEnrichment> {
+    const entry = resolveSourceEntry(this.config.sources, spec.source);
+
+    try {
+      const sourceAdapter = await createAdapter(entry.adapter, entry.connection);
+
+      if (spec.kind === "id") {
+        const record = await sourceAdapter.get(spec.collection, spec.id);
+        return {
+          record,
+          from: { source: spec.source, collection: spec.collection, id: spec.id },
+        };
+      }
+
+      const matches = await sourceAdapter.find(spec.collection, spec.filter, { limit: 2 });
+      const match = pickEnrichmentMatch(spec, matches);
+      const matchedId = match["id"];
+      if (typeof matchedId !== "string" && typeof matchedId !== "number") {
+        throw new SkemError(
+          `--enrich ${spec.raw}: the matched record has no usable "id" to fetch the full record by. Use the <source>:<collection>:<id> form instead.`,
+          "NOT_FOUND",
+          enrichErrorDetails(spec),
+        );
+      }
+
+      const record = await sourceAdapter.get(spec.collection, matchedId);
+      return {
+        record,
+        from: { source: spec.source, collection: spec.collection, id: matchedId },
+      };
+    } catch (error) {
+      throw this.normalizeEnrichmentError(error, spec);
+    }
+  }
+
+  private normalizeEnrichmentError(error: unknown, spec: ParsedEnrichSpec): Error {
+    if (error instanceof SkemError) {
+      return error;
+    }
+    if (!(error instanceof AdapterError)) {
+      return error instanceof Error ? error : new Error(String(error));
+    }
+
+    const details = enrichErrorDetails(spec);
+    switch (error.kind) {
+      case "auth":
+        return new AuthError(`Enrichment source "${spec.source}": ${error.message}`);
+      case "not_found":
+        return new SkemError(
+          `--enrich ${spec.raw}: nothing to enrich from. ${error.message}`,
+          "NOT_FOUND",
+          details,
+        );
+      case "validation":
+        return new SkemError(`Enrichment source "${spec.source}": ${error.message}`, "VALIDATION", details);
+      default:
+        return new SkemError(`Enrichment source "${spec.source}": ${error.message}`, "ERROR", details);
+    }
   }
 
   private async resolveLinkTarget(
