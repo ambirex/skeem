@@ -1,6 +1,6 @@
 {
   "name": "@skeems/nocodb",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "NocoDB adapter for the skeem CLI.",
   "license": "MIT",
   "author": "Brent Doll <brent.doll@gmail.com>",
@@ -40,7 +40,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@skeems/types": "0.5.0"
+    "@skeems/types": "0.6.0"
   },
   "scripts": {
     "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",

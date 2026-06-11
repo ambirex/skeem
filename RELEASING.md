@@ -24,10 +24,19 @@ environment):
 ```bash
 export V=0.6.0
 
-# 1. Bump every workspace to $V in lockstep.
-for d in packages/*/; do
-  npm version "$V" -w "$(node -p "require('./$d/package.json').name")" --no-git-tag-version
-done
+# 1. Bump every workspace to $V in lockstep. (Direct writes, NOT `npm version -w`:
+#    that re-resolves the dependency tree mid-loop while versions are skewed, falls
+#    back to the registry for the still-old pins, and 404s when those versions were
+#    never published.)
+node -e '
+  const fs = require("fs");
+  for (const d of fs.readdirSync("packages")) {
+    const f = `packages/${d}/package.json`;
+    const pkg = JSON.parse(fs.readFileSync(f, "utf8"));
+    pkg.version = process.env.V;
+    fs.writeFileSync(f, JSON.stringify(pkg, null, 2) + "\n");
+  }
+'
 
 # 2. Re-pin every internal @skeems/* dependency to $V.
 node -e '
@@ -87,8 +96,9 @@ The CLI should print a JSON usage envelope.
 - `0.3.0` — added `@skeems/pocketbase`; adapter registry + `AdapterError` contract.
 - `0.4.0` — added `@skeems/nocodb`; five-package lockstep.
 - `0.5.0` — added `@skeems/strapi` (data tier); six-package lockstep.
-- `0.6.0` (unreleased) — `skeem tools`; adapter `link`/`unlink` capability; the
+- `0.6.0` (2026-06-11) — `skeem tools`; adapter `link`/`unlink` capability; the
   read-tier reference family (`@skeems/wikidata` as external-ID hub, plus
   `@skeems/musicbrainz`, `@skeems/osm`, `@skeems/openlibrary`,
-  `@skeems/crossref`, `@skeems/tmdb`); schema-cache adapter validation;
+  `@skeems/crossref`, `@skeems/tmdb`); cross-adapter enrichment (`--enrich`
+  with the `sources:` config block); schema-cache adapter validation;
   twelve-package lockstep.
