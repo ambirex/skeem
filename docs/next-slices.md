@@ -1000,6 +1000,10 @@ The core runtime is now covering the main system-table and data-operation founda
 17. Slice 17: Idempotency Foundation
 18. Slice 18: Extension Registry Foundation
 
+## Proposed (designed, not scheduled)
+
+- **Cross-adapter enrichment (`--enrich`)** — fill a `create`/`upsert` payload from a read-tier reference source (TMDB, Wikidata, …) via a second source adapter, keyed on the shared `externalIds` vocabulary. Full design in [proposals/cross-adapter-enrichment.md](proposals/cross-adapter-enrichment.md).
+
 ## Not Next
 
 These are intentionally not part of the immediate next slice:
