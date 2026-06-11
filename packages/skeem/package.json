@@ -39,7 +39,7 @@
     "node": ">=20"
   },
   "bin": {
-    "skeem": "./dist/bin/skeem.js"
+    "skeem": "dist/bin/skeem.js"
   },
   "types": "./dist/src/index.d.ts",
   "exports": {
