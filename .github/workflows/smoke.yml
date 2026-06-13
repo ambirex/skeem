@@ -25,6 +25,21 @@ jobs:
       # self-provisions Directus via npx, so no Docker/service container is needed.
       - run: npm run smoke:directus
 
+  mcp-smoke:
+    name: MCP smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Boots the same self-provisioned Directus fixture and drives the built
+      # @skeems/mcp server over stdio with the official MCP SDK client.
+      - run: npm run smoke:mcp
+
   conformance:
     name: Conformance (${{ matrix.adapter }})
     runs-on: ubuntu-latest
