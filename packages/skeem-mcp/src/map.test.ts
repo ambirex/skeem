@@ -68,7 +68,7 @@ describe("mergeCli", () => {
 
 describe("envelopeResult", () => {
   test("carries the envelope as text and structuredContent", () => {
-    const envelope: SuccessEnvelope = { ok: true, operation: "ls", data: [] };
+    const envelope: SuccessEnvelope = { v: 1, ok: true, operation: "ls", data: [] };
     const result = envelopeResult(envelope);
     expect(result.structuredContent).toEqual(envelope);
     expect(result.isError).toBeUndefined();

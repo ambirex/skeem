@@ -21,16 +21,21 @@ skeem find companies --where name=Acme --json
 Success envelope:
 
 ```json
-{ "ok": true, "operation": "find", "collection": "companies",
+{ "v": 1, "ok": true, "operation": "find", "collection": "companies",
   "data": [ { "id": 17, "name": "Acme" } ], "count": 1 }
 ```
 
 Error envelope (process exit code is non-zero):
 
 ```json
-{ "ok": false, "operation": "create", "collection": "people",
+{ "v": 1, "ok": false, "operation": "create", "collection": "people",
   "error": { "code": "VALIDATION", "message": "...", "field": "email" } }
 ```
+
+Every envelope carries `v`, the envelope schema version (currently `1`). It is
+additive-only — new optional fields may appear and codes are never repurposed;
+`v` bumps only on a breaking shape change. Parse defensively and ignore unknown
+fields.
 
 Branch on `ok` first, then on `error.code` — never on the message text. Codes:
 `NOT_FOUND`, `AMBIGUOUS`, `DUPLICATE`, `VALIDATION`, `AUTH`, `RELATION_NOT_FOUND`,

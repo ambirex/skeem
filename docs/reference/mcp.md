@@ -110,6 +110,10 @@ typed code is skeem's agent contract, and flattening it to a generic failure
 would make models blind-retry instead of reading the code. Only malformed tool
 arguments surface as protocol-level errors.
 
+Both the text content and `structuredContent` carry `v` (the envelope schema
+version, currently `1`; additive-only). The MCP server passes the runtime
+envelope through verbatim, so `v` matches the CLI exactly.
+
 ## Lifecycle
 
 The runtime is created lazily on the first tool call, so a server launched

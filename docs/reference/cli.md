@@ -254,6 +254,7 @@ Use `--json` for machine-readable output. Success envelopes use:
 
 ```json
 {
+  "v": 1,
   "ok": true,
   "operation": "find",
   "collection": "companies",
@@ -266,6 +267,7 @@ Error envelopes use:
 
 ```json
 {
+  "v": 1,
   "ok": false,
   "operation": "find",
   "collection": "companies",
@@ -275,6 +277,16 @@ Error envelopes use:
   }
 }
 ```
+
+### Envelope version (`v`)
+
+Every envelope carries `v`, the envelope **schema** version (currently `1`).
+The contract is **additive-only**: new optional fields may appear without a
+bump, and an `error.code` is never repurposed. `v` increments only on a
+breaking change to the envelope *shape* — so a parser written against `v: 1`
+keeps working as skeem grows. (Note: schema-directed value coercion, e.g. a
+numeric-looking string stored in a `string` field staying a string, is a change
+to *data values*, not envelope shape, and does not bump `v`.)
 
 ## Exit Codes
 

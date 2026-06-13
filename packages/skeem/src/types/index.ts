@@ -150,6 +150,8 @@ export interface SchemaPlanSummary {
 }
 
 export interface SuccessEnvelope {
+  /** Envelope schema version. Additive-only; bumps only on a breaking shape change. */
+  v: 1;
   ok: true;
   operation: string;
   collection?: string;
@@ -166,6 +168,8 @@ export interface SuccessEnvelope {
 }
 
 export interface ErrorEnvelope {
+  /** Envelope schema version. Additive-only; bumps only on a breaking shape change. */
+  v: 1;
   ok: false;
   operation?: string;
   collection?: string;

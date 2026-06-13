@@ -4,8 +4,14 @@ import { SkemError } from "../errors/index.js";
 import type { DescribeDocument, SchemaDocument } from "../schema/serialization.js";
 import type { ErrorEnvelope, SchemaDiffResult, SchemaPlanEntry, SchemaPlanSummary, SuccessEnvelope } from "../types/index.js";
 
-export function toSuccessEnvelope(partial: Omit<SuccessEnvelope, "ok">): SuccessEnvelope {
+// The envelope schema version. Bumps ONLY on a breaking shape change; the
+// envelope is otherwise additive-only and error codes are never repurposed.
+// See ENVELOPE_VERSION usage in docs/reference/cli.md.
+export const ENVELOPE_VERSION = 1;
+
+export function toSuccessEnvelope(partial: Omit<SuccessEnvelope, "ok" | "v">): SuccessEnvelope {
   return {
+    v: ENVELOPE_VERSION,
     ok: true,
     ...partial,
   };
@@ -14,6 +20,7 @@ export function toSuccessEnvelope(partial: Omit<SuccessEnvelope, "ok">): Success
 export function toErrorEnvelope(error: unknown, operation?: string, collection?: string): ErrorEnvelope {
   if (error instanceof SkemError) {
     return {
+      v: ENVELOPE_VERSION,
       ok: false,
       ...(operation ? { operation } : {}),
       ...(collection ? { collection } : {}),
@@ -28,6 +35,7 @@ export function toErrorEnvelope(error: unknown, operation?: string, collection?:
 
   if (error instanceof Error) {
     return {
+      v: ENVELOPE_VERSION,
       ok: false,
       ...(operation ? { operation } : {}),
       ...(collection ? { collection } : {}),
@@ -39,6 +47,7 @@ export function toErrorEnvelope(error: unknown, operation?: string, collection?:
   }
 
   return {
+    v: ENVELOPE_VERSION,
     ok: false,
     ...(operation ? { operation } : {}),
     ...(collection ? { collection } : {}),

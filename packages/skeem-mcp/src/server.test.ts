@@ -24,7 +24,7 @@ const ALL_TOOLS = [
 ];
 const READ_TOOLS = ["skeem_ls", "skeem_describe", "skeem_discover", "skeem_get", "skeem_find", "skeem_claims"];
 
-const lsEnvelope: SuccessEnvelope = { ok: true, operation: "ls", data: [{ collection: "widgets", fields: 3 }], count: 1 };
+const lsEnvelope: SuccessEnvelope = { v: 1, ok: true, operation: "ls", data: [{ collection: "widgets", fields: 3 }], count: 1 };
 
 function mockRuntime(overrides: Partial<Record<string, unknown>> = {}): SkeemRuntime {
   return {

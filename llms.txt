@@ -3,7 +3,7 @@
 > Relational-aware CLI for headless backends (Directus, PocketBase, NocoDB, Strapi) and public reference datasets (WikiData, MusicBrainz, OpenStreetMap, Open Library, CrossRef, TMDB), built for AI agents. One schema-aware command replaces several raw API calls, and every command returns a stable JSON envelope under `--json`.
 
 How to drive skeem well:
-- Always pass `--json` and parse the envelope: `{ "ok": true, "operation", "data", "count" }`, or `{ "ok": false, "error": { "code", "message" } }`. Branch on `ok` then `error.code` (NOT_FOUND, DUPLICATE, VALIDATION, AUTH, RELATION_NOT_FOUND, AMBIGUOUS, SCHEMA_UNSUPPORTED, USAGE, ERROR), never on message text. Exit code is 0 on success, 1 on failure.
+- Always pass `--json` and parse the envelope: `{ "v": 1, "ok": true, "operation", "data", "count" }`, or `{ "v": 1, "ok": false, "error": { "code", "message" } }`. Every envelope carries `v` (the envelope schema version, additive-only — bumps only on a breaking shape change). Branch on `ok` then `error.code` (NOT_FOUND, DUPLICATE, VALIDATION, AUTH, RELATION_NOT_FOUND, AMBIGUOUS, SCHEMA_UNSUPPORTED, USAGE, ERROR), never on message text; ignore unknown fields. Exit code is 0 on success, 1 on failure.
 - Discover before writing: `skeem ls --counts`, `skeem describe <collection>`, `skeem discover` reveal exact field names, required/enum fields, and relations.
 - Relation grammar on write values: `42` (scalar/fk id), `@42` (link by id), `?field=value` (resolve existing), `??field=value` (resolve-or-create), `child.field` (nested inline). Prefer `?`/`??` over manual find-then-create.
 - `skeem tools --format anthropic|openai` generates typed tool definitions from the live schema.

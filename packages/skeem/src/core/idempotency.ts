@@ -11,13 +11,13 @@ export interface IdempotencyRequest {
 export interface IdempotencyMetadata {
   version: 1;
   request: IdempotencyRequest;
-  response: Omit<SuccessEnvelope, "ok">;
+  response: Omit<SuccessEnvelope, "ok" | "v">;
 }
 
 export function attachIdempotencyMetadata(
   inputRefs: unknown,
   request: IdempotencyRequest,
-  response: Omit<SuccessEnvelope, "ok">,
+  response: Omit<SuccessEnvelope, "ok" | "v">,
 ): unknown {
   const metadata: IdempotencyMetadata = {
     version: 1,
@@ -63,7 +63,7 @@ export function extractIdempotencyMetadata(inputRefs: unknown): IdempotencyMetad
   return {
     version: 1,
     request: request as unknown as IdempotencyRequest,
-    response: response as unknown as Omit<SuccessEnvelope, "ok">,
+    response: response as unknown as Omit<SuccessEnvelope, "ok" | "v">,
   };
 }
 

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Envelope schema version (`v`).** Every JSON envelope now carries `v: 1` as
+  its first field — the envelope *schema* version. The contract is
+  **additive-only**: new optional fields may appear without a bump and an
+  `error.code` is never repurposed; `v` increments only on a breaking change to
+  the envelope shape. This lets a parser written against `v: 1` keep working as
+  skeem grows. Added via the two envelope constructors (`toSuccessEnvelope`,
+  `toErrorEnvelope`) and the exported `ENVELOPE_VERSION`; the MCP server passes
+  it through verbatim.
+
 ## [0.7.0] - 2026-06-12
 
 ### Fixed
