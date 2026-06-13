@@ -23,7 +23,7 @@ import { generateToolDefinitions, type ToolFormat } from "../agent/tools.js";
 import { loadSchemaDocument } from "../schema/document.js";
 import { diffSchemaDocuments } from "../schema/diff.js";
 import { buildDefinePlan } from "../schema/plan.js";
-import { buildInputNode, parseFilterAssignment, resolveRefs, topoSortOperations } from "./values.js";
+import { buildInputNode, coerceFilter, parseFilterAssignment, resolveRefs, topoSortOperations } from "./values.js";
 import {
   buildAnnotationRecord,
   normalizeAnnotationKey,
@@ -407,6 +407,7 @@ export class SkeemRuntime {
     const schema = await this.loadSchemaForData(options.cli);
     const collection = this.resolveCollection(schema, collectionInput);
     const expand = resolveExpandPaths(schema, collection.name, options.expand);
+    filter = coerceFilter(filter, collection);
 
     try {
       const records = await this.adapter.find(collection.name, filter, {
@@ -434,7 +435,7 @@ export class SkeemRuntime {
   ): Promise<SuccessEnvelope> {
     const schema = await this.loadSchemaForData(cli);
     const collection = this.resolveCollection(schema, collectionInput);
-    let node = buildInputNode(fieldEntries, collection.name);
+    let node = buildInputNode(fieldEntries, collection);
     const enrichSpec = options?.enrich ? parseEnrichSpec(options.enrich.spec) : undefined;
     const enrichMaps = options?.enrich ? parseMapEntries(options.enrich.map) : [];
     const enrichInputRefs = options?.enrich
@@ -512,7 +513,7 @@ export class SkeemRuntime {
   ): Promise<SuccessEnvelope> {
     const schema = await this.loadSchemaForData(cli);
     const collection = this.resolveCollection(schema, collectionInput);
-    const node = buildInputNode(fieldEntries, collection.name);
+    const node = buildInputNode(fieldEntries, collection);
     const request = this.buildIdempotencyRequest("update", collection.name, {
       id,
       fields: this.fieldEntriesToObject(fieldEntries),
@@ -976,7 +977,8 @@ export class SkeemRuntime {
 
     const schema = await this.loadSchemaForData(cli);
     const collection = this.resolveCollection(schema, collectionInput);
-    const node = buildInputNode(fieldEntries, collection.name);
+    match = coerceFilter(match, collection);
+    const node = buildInputNode(fieldEntries, collection);
     const enrichSpec = options?.enrich ? parseEnrichSpec(options.enrich.spec) : undefined;
     const enrichMaps = options?.enrich ? parseMapEntries(options.enrich.map) : [];
     const enrichInputRefs = options?.enrich
@@ -3424,8 +3426,13 @@ async function readStdin(): Promise<string> {
 }
 
 export function parseWhere(values: string[]): Filter {
+  // Return raw string values; the runtime coerces them against the resolved
+  // collection schema (coerceFilter), so filters match the write path exactly.
   return Object.fromEntries(values.map((entry) => {
-    const assignment = parseFilterAssignment(entry);
-    return [assignment.field, assignment.value];
+    const separator = entry.indexOf("=");
+    if (separator === -1) {
+      throw new UsageError(`Expected field=value but received "${entry}".`);
+    }
+    return [entry.slice(0, separator), entry.slice(separator + 1)];
   }));
 }

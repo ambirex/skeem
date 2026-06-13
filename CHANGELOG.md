@@ -7,7 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Schema-directed value coercion.** Field and filter values are now coerced by
+  the target field's *declared type* (from the introspected schema) rather than a
+  type-blind look-at-the-string heuristic. A numeric-looking string in a
+  `string` field stays a string — e.g. `create books --isbn_13 9780345391803`
+  now stores `"9780345391803"`, not `9780345391803`. Integer/float/boolean
+  fields still coerce; `null` remains the "unset" sentinel; fields absent from
+  the schema fall back to the old heuristic. `--where`/`--match` filters are
+  coerced the same way, so a value written and a value matched agree (no
+  write-vs-match split-brain). **Behavior change** for anyone who relied on the
+  old coercion of numeric-looking strings in string fields — see the typed
+  prefixes below to force any type.
+
 ### Added
+
+- **Explicit typed value prefixes** to override coercion: `str:`, `int:`,
+  `float:`, `bool:`, `json:` (e.g. `--isbn_13 str:9780345391803`,
+  `--meta json:'{"k":1}'`, `--qty int:2`). They work uniformly in `--field`
+  values, `--where`/`--match`, and relation filters. `str:` doubles as the
+  literal escape (`str:@x` → the string `"@x"`); malformed typed literals error
+  clearly. The schema usually makes these unnecessary — they're the override for
+  when it's wrong, absent, or you want a real JSON object in a `json` field.
 
 - **Envelope schema version (`v`).** Every JSON envelope now carries `v: 1` as
   its first field — the envelope *schema* version. The contract is

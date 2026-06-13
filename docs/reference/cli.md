@@ -96,6 +96,28 @@ Behavior highlights:
 - `upsert` uses repeated `--match` flags for the lookup filter.
 - `link` and `unlink` handle both direct relation shorthand and explicit relation syntax.
 
+### Value typing
+
+Field and filter values are coerced by the target field's **declared type**
+(from the introspected schema): a numeric-looking string in a `string` field
+stays a string (an ISBN is a name, not arithmetic), while `integer`/`float`/
+`boolean` fields coerce. `null` is the "unset" sentinel. A field not present in
+the schema falls back to a look-at-the-string heuristic. `--where`/`--match`
+filters coerce the same way, so a value written and a value matched agree.
+
+To override, prefix the value with an explicit type — `str:`, `int:`, `float:`,
+`bool:`, `json:`:
+
+```bash
+skeem create books --isbn_13 str:9780345391803     # force string (usually unnecessary; schema already does this)
+skeem create movies --meta json:'{"rating":"R"}'   # a real JSON object into a json field
+skeem find orders --where total=float:19.99         # force the filter's type
+```
+
+`str:` also escapes the relation prefixes and literal tokens (`str:@x` → the
+string `"@x"`, `str:null` → `"null"`). Malformed typed literals (e.g.
+`int:nope`) fail with a clear `USAGE` error.
+
 ### Enrichment (`--enrich`)
 
 `create` and `upsert` can fold a record fetched from a second, read-only

@@ -1207,6 +1207,19 @@ try {
     throw new Error(`Find failed or returned unexpected count:\n${JSON.stringify(found, null, 2)}`);
   }
 
+  // Type-directed coercion: a numeric-looking string in a string field stays a
+  // string end-to-end, and a --where filter on it still matches it (no
+  // write-vs-match split-brain).
+  const numericNamed = await runSkeemJson(["create", "widgets", "--name", "9780345391803"]);
+  if (!numericNamed.ok || numericNamed.data?.name !== "9780345391803") {
+    throw new Error(`Numeric-looking string was not stored as a string:\n${JSON.stringify(numericNamed, null, 2)}`);
+  }
+  const foundNumeric = await runSkeemJson(["find", "widgets", "--where", "name=9780345391803"]);
+  if (!foundNumeric.ok || foundNumeric.count !== 1 || foundNumeric.data?.[0]?.name !== "9780345391803") {
+    throw new Error(`--where on a numeric-looking string field did not match the stored string:\n${JSON.stringify(foundNumeric, null, 2)}`);
+  }
+  await runSkeemJson(["delete", "widgets", String(numericNamed.data.id), "--hard"]);
+
   const updated = await runSkeemJson(["update", "widgets", String(widgetId), "--name", "Beta Widget"]);
   if (!updated.ok || updated.data?.name !== "Beta Widget") {
     throw new Error(`Update failed or returned unexpected data:\n${JSON.stringify(updated, null, 2)}`);

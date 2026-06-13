@@ -80,6 +80,17 @@ skeem create people --name "Mia" --company ??name=Acme --json
 Prefer `?`/`??` over a manual find-then-create sequence — it is fewer steps and
 avoids duplicate records.
 
+### Value typing
+
+Values are coerced by the field's **declared type** (from the schema), not by
+how the string looks — so a numeric-looking string in a `string` field stays a
+string (ISBNs, phone numbers, zip codes survive intact), while `integer`/
+`float`/`boolean` fields coerce. `null` means "unset". `--where`/`--match`
+coerce the same way, so writes and matches agree. To force a type, prefix the
+value: `str:`, `int:`, `float:`, `bool:`, `json:` (e.g. `--meta json:'{"k":1}'`
+for a real object in a `json` field; `str:9780…` to force a string). `str:`
+also escapes (`str:@x` → the literal `"@x"`).
+
 ## Core verbs
 
 ```bash

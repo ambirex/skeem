@@ -21,16 +21,21 @@ skeem find companies --where name=Acme --json
 Success envelope:
 
 ```json
-{ "ok": true, "operation": "find", "collection": "companies",
+{ "v": 1, "ok": true, "operation": "find", "collection": "companies",
   "data": [ { "id": 17, "name": "Acme" } ], "count": 1 }
 ```
 
 Error envelope (process exit code is non-zero):
 
 ```json
-{ "ok": false, "operation": "create", "collection": "people",
+{ "v": 1, "ok": false, "operation": "create", "collection": "people",
   "error": { "code": "VALIDATION", "message": "...", "field": "email" } }
 ```
+
+Every envelope carries `v`, the envelope schema version (currently `1`). It is
+additive-only — new optional fields may appear and codes are never repurposed;
+`v` bumps only on a breaking shape change. Parse defensively and ignore unknown
+fields.
 
 Branch on `ok` first, then on `error.code` — never on the message text. Codes:
 `NOT_FOUND`, `AMBIGUOUS`, `DUPLICATE`, `VALIDATION`, `AUTH`, `RELATION_NOT_FOUND`,
@@ -74,6 +79,17 @@ skeem create people --name "Mia" --company ??name=Acme --json
 
 Prefer `?`/`??` over a manual find-then-create sequence — it is fewer steps and
 avoids duplicate records.
+
+### Value typing
+
+Values are coerced by the field's **declared type** (from the schema), not by
+how the string looks — so a numeric-looking string in a `string` field stays a
+string (ISBNs, phone numbers, zip codes survive intact), while `integer`/
+`float`/`boolean` fields coerce. `null` means "unset". `--where`/`--match`
+coerce the same way, so writes and matches agree. To force a type, prefix the
+value: `str:`, `int:`, `float:`, `bool:`, `json:` (e.g. `--meta json:'{"k":1}'`
+for a real object in a `json` field; `str:9780…` to force a string). `str:`
+also escapes (`str:@x` → the literal `"@x"`).
 
 ## Core verbs
 
