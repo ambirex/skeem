@@ -1,10 +1,10 @@
 {
   "name": "skeem",
-  "version": "0.6.0",
-  "description": "Relational-aware CLI for headless backends (Directus, PocketBase, NocoDB, Strapi) and public reference datasets (WikiData, TMDB, CrossRef, …), built for AI agents.",
+  "version": "0.7.0",
+  "description": "Relational-aware CLI (and MCP server, via @skeems/mcp) for headless backends (Directus, PocketBase, NocoDB, Strapi) and public reference datasets (WikiData, TMDB, CrossRef, …), built for AI agents.",
   "license": "MIT",
   "author": "Brent Doll <brent.doll@gmail.com>",
-  "homepage": "https://github.com/ambirex/skeem#readme",
+  "homepage": "https://skeem.brenty.dev",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ambirex/skeem.git",
@@ -61,17 +61,17 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@skeems/crossref": "0.6.0",
-    "@skeems/directus": "0.6.0",
-    "@skeems/musicbrainz": "0.6.0",
-    "@skeems/nocodb": "0.6.0",
-    "@skeems/openlibrary": "0.6.0",
-    "@skeems/osm": "0.6.0",
-    "@skeems/pocketbase": "0.6.0",
-    "@skeems/strapi": "0.6.0",
-    "@skeems/tmdb": "0.6.0",
-    "@skeems/types": "0.6.0",
-    "@skeems/wikidata": "0.6.0",
+    "@skeems/crossref": "0.7.0",
+    "@skeems/directus": "0.7.0",
+    "@skeems/musicbrainz": "0.7.0",
+    "@skeems/nocodb": "0.7.0",
+    "@skeems/openlibrary": "0.7.0",
+    "@skeems/osm": "0.7.0",
+    "@skeems/pocketbase": "0.7.0",
+    "@skeems/strapi": "0.7.0",
+    "@skeems/tmdb": "0.7.0",
+    "@skeems/types": "0.7.0",
+    "@skeems/wikidata": "0.7.0",
     "yaml": "^2.8.1"
   },
   "devDependencies": {

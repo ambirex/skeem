@@ -1,6 +1,6 @@
 {
   "name": "@skeems/tmdb",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Read-only TMDB adapter for the skeem CLI (movies, TV, people).",
   "license": "MIT",
   "author": "Brent Doll <brent.doll@gmail.com>",
@@ -40,7 +40,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@skeems/types": "0.6.0"
+    "@skeems/types": "0.7.0"
   },
   "scripts": {
     "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",

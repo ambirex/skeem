@@ -1,6 +1,6 @@
 {
   "name": "@skeems/mcp",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "MCP server for skeem: relational-aware tools over headless backends (Directus, PocketBase, NocoDB, Strapi) and public reference datasets (WikiData, TMDB, CrossRef, …), for MCP clients like Claude.",
   "license": "MIT",
   "author": "Brent Doll <brent.doll@gmail.com>",
@@ -50,7 +50,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "skeem": "0.6.0",
+    "skeem": "0.7.0",
     "zod": "^3.25.76"
   },
   "scripts": {

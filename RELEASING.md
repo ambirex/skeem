@@ -4,9 +4,11 @@
 shared version, with every internal dependency pinned exactly. The invariants:
 
 - `@skeems/types` has zero dependencies; every adapter pins `@skeems/types`
-  exactly; the `skeem` CLI pins `@skeems/types` and **every** adapter exactly.
+  exactly; the `skeem` CLI pins `@skeems/types` and **every** adapter exactly;
+  `@skeems/mcp` pins `skeem` (the bare CLI package) exactly.
 - Publish order: `@skeems/types` first, then every other `@skeems/*` adapter
-  (any order among themselves), then `skeem` last.
+  (any order among themselves), then `skeem`, then `@skeems/mcp` **last** (it
+  depends on `skeem`).
 
 Adding an adapter never changes this file — the loops below derive the package
 list from `packages/`.
@@ -45,7 +47,8 @@ node -e '
     const f = `packages/${d}/package.json`;
     const pkg = JSON.parse(fs.readFileSync(f, "utf8"));
     for (const dep of Object.keys(pkg.dependencies ?? {})) {
-      if (dep.startsWith("@skeems/")) pkg.dependencies[dep] = process.env.V;
+      // @skeems/* adapters, plus the bare `skeem` dep that @skeems/mcp pins.
+      if (dep.startsWith("@skeems/") || dep === "skeem") pkg.dependencies[dep] = process.env.V;
     }
     fs.writeFileSync(f, JSON.stringify(pkg, null, 2) + "\n");
   }
@@ -63,14 +66,20 @@ git commit -m "Release v$V"
 git tag "v$V"
 git push && git push --tags
 
-# 6. Publish in dependency order: types -> adapters -> cli.
+# 6. Publish in dependency order: types -> adapters -> cli -> mcp.
+#    (Each npm publish needs an OTP: pass --otp=<code>; one TOTP covers the run
+#    if you go fast. After publishing, npm view/install may 404 for a few minutes
+#    on scoped packuments — registry propagation, not failure; wait and retry.)
 npm publish -w @skeems/types
 for d in packages/*/; do
   name="$(node -p "require('./$d/package.json').name")"
-  case "$name" in @skeems/types|skeem) continue ;; esac
+  # Hold back skeem and @skeems/mcp: skeem depends on the adapters, and
+  # @skeems/mcp depends on skeem, so they publish after this loop.
+  case "$name" in @skeems/types|skeem|@skeems/mcp) continue ;; esac
   npm publish -w "$name"
 done
 npm publish -w skeem
+npm publish -w @skeems/mcp
 ```
 
 If a later `npm publish` fails, the earlier packages are already on the
@@ -102,3 +111,6 @@ The CLI should print a JSON usage envelope.
   `@skeems/crossref`, `@skeems/tmdb`); cross-adapter enrichment (`--enrich`
   with the `sources:` config block); schema-cache adapter validation;
   twelve-package lockstep.
+- `0.7.0` (2026-06-12) — marketing push: `@skeems/mcp` MCP server (publishes
+  last, after `skeem`); adapter-default URLs for the reference adapters; WikiData
+  `mul`-label fix; the skeem.brenty.dev site. **Thirteen-package lockstep.**

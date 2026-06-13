@@ -2,8 +2,8 @@
   "id": "exec-dag",
   "title": "A dependent graph in one call.",
   "tagline": "Multi-step plans with reference resolution.",
-  "skeemVersion": "0.6.0",
-  "capturedAt": "2026-06-13T03:23:35.691Z",
+  "skeemVersion": "0.7.0",
+  "capturedAt": "2026-06-13T03:40:17.355Z",
   "env": {
     "backend": "Directus (local fixture)",
     "liveApis": [],
@@ -24,7 +24,7 @@
       "command": "skeem exec --json < plan.json",
       "output": "{\n  \"ok\": true,\n  \"operation\": \"exec\",\n  \"plan\": [\n    {\n      \"ref\": \"company\",\n      \"operation\": \"upsert\",\n      \"collection\": \"companies\",\n      \"data\": {\n        \"id\": 1,\n        \"name\": \"Acme\",\n        \"industry\": \"Robotics\"\n      }\n    },\n    {\n      \"ref\": \"root\",\n      \"operation\": \"create\",\n      \"collection\": \"people\",\n      \"data\": {\n        \"id\": 1,\n        \"name\": \"Mia\",\n        \"company_id\": 1\n      }\n    }\n  ],\n  \"count\": 2\n}",
       "exitCode": 0,
-      "durationMs": 141,
+      "durationMs": 159,
       "outputFormat": "json",
       "highlight": [
         "\"compound",
@@ -37,7 +37,7 @@
       "command": "skeem get people 1 --expand company_id --json",
       "output": "{\n  \"id\": 1,\n  \"name\": \"Mia\",\n  \"company_id\": {\n    \"id\": 1,\n    \"name\": \"Acme\",\n    \"industry\": \"Robotics\"\n  }\n}",
       "exitCode": 0,
-      "durationMs": 105,
+      "durationMs": 110,
       "outputFormat": "json"
     }
   ]

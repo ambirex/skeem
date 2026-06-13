@@ -2,8 +2,8 @@
   "id": "claims",
   "title": "Two agents, one record.",
   "tagline": "Coordination primitives, built in.",
-  "skeemVersion": "0.6.0",
-  "capturedAt": "2026-06-13T03:23:35.691Z",
+  "skeemVersion": "0.7.0",
+  "capturedAt": "2026-06-13T03:40:17.355Z",
   "env": {
     "backend": "Directus (local fixture)",
     "liveApis": [],
@@ -13,9 +13,9 @@
     {
       "comment": "# agent-a leases the record before working on it",
       "command": "skeem claim movies:1 --lease 15m --purpose \"enriching metadata\" --actor agent-a --json",
-      "output": "{\n  \"ok\": true,\n  \"operation\": \"claim\",\n  \"action\": \"claimed\",\n  \"collection\": \"movies\",\n  \"data\": {\n    \"source\": {\n      \"collection\": \"movies\",\n      \"id\": 1\n    },\n    \"claim\": {\n      \"id\": 1,\n      \"collection\": \"movies\",\n      \"record_id\": \"1\",\n      \"claimed_by\": \"agent-a\",\n      \"purpose\": \"enriching metadata\",\n      \"lease_until\": \"2026-06-13T03:39:01.216Z\",\n      \"created_at\": \"2026-06-13T03:24:01.216Z\"\n    }\n  }\n}",
+      "output": "{\n  \"ok\": true,\n  \"operation\": \"claim\",\n  \"action\": \"claimed\",\n  \"collection\": \"movies\",\n  \"data\": {\n    \"source\": {\n      \"collection\": \"movies\",\n      \"id\": 1\n    },\n    \"claim\": {\n      \"id\": 1,\n      \"collection\": \"movies\",\n      \"record_id\": \"1\",\n      \"claimed_by\": \"agent-a\",\n      \"purpose\": \"enriching metadata\",\n      \"lease_until\": \"2026-06-13T03:55:39.828Z\",\n      \"created_at\": \"2026-06-13T03:40:39.828Z\"\n    }\n  }\n}",
       "exitCode": 0,
-      "durationMs": 175,
+      "durationMs": 277,
       "outputFormat": "json",
       "highlight": [
         "\"ok\": true"
@@ -25,9 +25,9 @@
     {
       "comment": "# agent-b tries to claim the same record",
       "command": "skeem claim movies:1 --lease 5m --actor agent-b --json",
-      "output": "{\n  \"ok\": false,\n  \"operation\": \"claim\",\n  \"error\": {\n    \"code\": \"VALIDATION\",\n    \"message\": \"Record \\\"movies:1\\\" is already claimed by \\\"agent-a\\\" until \\\"2026-06-13T03:39:01.216Z\\\".\",\n    \"field\": \"claimed_by\",\n    \"details\": {\n      \"field\": \"claimed_by\"\n    }\n  }\n}",
+      "output": "{\n  \"ok\": false,\n  \"operation\": \"claim\",\n  \"error\": {\n    \"code\": \"VALIDATION\",\n    \"message\": \"Record \\\"movies:1\\\" is already claimed by \\\"agent-a\\\" until \\\"2026-06-13T03:55:39.828Z\\\".\",\n    \"field\": \"claimed_by\",\n    \"details\": {\n      \"field\": \"claimed_by\"\n    }\n  }\n}",
       "exitCode": 1,
-      "durationMs": 141,
+      "durationMs": 148,
       "outputFormat": "json",
       "highlight": [
         "\"ok\": false",
@@ -40,15 +40,15 @@
       "command": "skeem annotate movies:1 --key review --value '\"needs-citation\"' --actor agent-a --json",
       "output": "{\n  \"ok\": true,\n  \"operation\": \"annotate\",\n  \"data\": {\n    \"key\": null,\n    \"value\": null\n  }\n}",
       "exitCode": 0,
-      "durationMs": 198,
+      "durationMs": 187,
       "outputFormat": "json",
       "note": "Annotations + provenance leave a trail the next agent can read."
     },
     {
       "command": "skeem release movies:1 --actor agent-a --json",
-      "output": "{\n  \"ok\": true,\n  \"operation\": \"release\",\n  \"action\": \"released\",\n  \"collection\": \"movies\",\n  \"data\": {\n    \"source\": {\n      \"collection\": \"movies\",\n      \"id\": 1\n    },\n    \"claim\": {\n      \"id\": 1,\n      \"collection\": \"movies\",\n      \"record_id\": \"1\",\n      \"claimed_by\": \"agent-a\",\n      \"purpose\": \"enriching metadata\",\n      \"lease_until\": \"2026-06-13T03:39:01.216Z\",\n      \"created_at\": \"2026-06-13T03:24:01.216Z\"\n    },\n    \"released\": 1\n  }\n}",
+      "output": "{\n  \"ok\": true,\n  \"operation\": \"release\",\n  \"action\": \"released\",\n  \"collection\": \"movies\",\n  \"data\": {\n    \"source\": {\n      \"collection\": \"movies\",\n      \"id\": 1\n    },\n    \"claim\": {\n      \"id\": 1,\n      \"collection\": \"movies\",\n      \"record_id\": \"1\",\n      \"claimed_by\": \"agent-a\",\n      \"purpose\": \"enriching metadata\",\n      \"lease_until\": \"2026-06-13T03:55:39.828Z\",\n      \"created_at\": \"2026-06-13T03:40:39.828Z\"\n    },\n    \"released\": 1\n  }\n}",
       "exitCode": 0,
-      "durationMs": 136,
+      "durationMs": 134,
       "outputFormat": "json",
       "highlight": [
         "\"ok\": true"

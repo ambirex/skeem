@@ -2,8 +2,8 @@
   "id": "reading-log",
   "title": "A reading log from bare ISBNs.",
   "tagline": "No-auth reference lookups, safe to re-run.",
-  "skeemVersion": "0.6.0",
-  "capturedAt": "2026-06-13T03:23:35.691Z",
+  "skeemVersion": "0.7.0",
+  "capturedAt": "2026-06-13T03:40:17.355Z",
   "env": {
     "backend": "Directus (local fixture)",
     "liveApis": [
@@ -17,7 +17,7 @@
       "command": "skeem find editions --where isbn=9780345391803 --adapter openlibrary --json",
       "output": "{\n  \"id\": null,\n  \"title\": null\n}",
       "exitCode": 0,
-      "durationMs": 158,
+      "durationMs": 147,
       "outputFormat": "json",
       "note": "The find-form lookup; works for a barcode scanner in a shell loop."
     },
@@ -26,7 +26,7 @@
       "command": "skeem upsert books --match isbn_13=9780345391803 \\\n  --enrich \"openlibrary:editions?isbn=9780345391803\" --idempotency-key isbn-9780345391803 --json",
       "output": "{\n  \"ok\": true,\n  \"operation\": \"upsert\",\n  \"action\": \"created\",\n  \"collection\": \"books\",\n  \"data\": {\n    \"id\": 1,\n    \"title\": \"The Hitchhiker's Guide to the Galaxy\",\n    \"authors\": null,\n    \"isbn_13\": \"9780345391803.0\",\n    \"number_of_pages\": 309,\n    \"subjects\": null\n  },\n  \"plan\": [\n    {\n      \"ref\": \"root\",\n      \"operation\": \"create\",\n      \"collection\": \"books\",\n      \"data\": {\n        \"id\": 1,\n        \"title\": \"The Hitchhiker's Guide to the Galaxy\",\n        \"authors\": null,\n        \"isbn_13\": \"9780345391803.0\",\n        \"number_of_pages\": 309,\n        \"subjects\": null\n      }\n    }\n  ],\n  \"enrichedFrom\": {\n    \"source\": \"openlibrary\",\n    \"collection\": \"editions\",\n    \"id\": \"OL27297031M\"\n  },\n  \"enrichedFields\": [\n    \"number_of_pages\",\n    \"title\"\n  ]\n}",
       "exitCode": 0,
-      "durationMs": 4273,
+      "durationMs": 811,
       "outputFormat": "json",
       "highlight": [
         "\"action\"",
@@ -39,7 +39,7 @@
       "command": "skeem upsert books --match isbn_13=9780345391803 \\\n  --enrich \"openlibrary:editions?isbn=9780345391803\" --idempotency-key isbn-9780345391803 --json",
       "output": "{\n  \"ok\": true,\n  \"action\": \"created\",\n  \"id\": 1\n}",
       "exitCode": 0,
-      "durationMs": 179,
+      "durationMs": 170,
       "outputFormat": "json",
       "highlight": [
         "\"created\""
@@ -51,7 +51,7 @@
       "command": "skeem find books --json",
       "output": "{\n  \"count\": 1,\n  \"titles\": [\n    \"The Hitchhiker's Guide to the Galaxy\"\n  ]\n}",
       "exitCode": 0,
-      "durationMs": 137,
+      "durationMs": 148,
       "outputFormat": "json",
       "highlight": [
         "\"count\": 1"

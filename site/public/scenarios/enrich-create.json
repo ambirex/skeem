@@ -2,8 +2,8 @@
   "id": "enrich-create",
   "title": "Look it up, don't make it up.",
   "tagline": "Agents fetch facts instead of recalling them.",
-  "skeemVersion": "0.6.0",
-  "capturedAt": "2026-06-13T03:23:35.691Z",
+  "skeemVersion": "0.7.0",
+  "capturedAt": "2026-06-13T03:40:17.355Z",
   "env": {
     "backend": "Directus (local fixture)",
     "liveApis": [
@@ -17,7 +17,7 @@
       "command": "skeem describe movies --json",
       "output": "{\n  \"collection\": null,\n  \"fields\": [\n    \"id\",\n    \"imdb_id\",\n    \"overview\",\n    \"release_date\",\n    \"title\"\n  ]\n}",
       "exitCode": 0,
-      "durationMs": 195,
+      "durationMs": 197,
       "outputFormat": "json",
       "note": "Discover first, so the write targets real fields."
     },
@@ -26,7 +26,7 @@
       "command": "skeem create movies --enrich wikidata:items:Q83495 \\\n  --map label=title --map description=overview --map externalIds.imdb=imdb_id --json",
       "output": "{\n  \"ok\": true,\n  \"operation\": \"create\",\n  \"collection\": \"movies\",\n  \"data\": {\n    \"id\": 2,\n    \"title\": \"The Matrix\",\n    \"release_date\": null,\n    \"overview\": \"1999 American science fiction action thriller film\",\n    \"imdb_id\": \"tt0133093\"\n  },\n  \"plan\": [\n    {\n      \"ref\": \"root\",\n      \"operation\": \"create\",\n      \"collection\": \"movies\",\n      \"data\": {\n        \"id\": 2,\n        \"title\": \"The Matrix\",\n        \"release_date\": null,\n        \"overview\": \"1999 American science fiction action thriller film\",\n        \"imdb_id\": \"tt0133093\"\n      }\n    }\n  ],\n  \"enrichedFrom\": {\n    \"source\": \"wikidata\",\n    \"collection\": \"items\",\n    \"id\": \"Q83495\"\n  },\n  \"enrichedFields\": [\n    \"imdb_id\",\n    \"overview\",\n    \"title\"\n  ]\n}",
       "exitCode": 0,
-      "durationMs": 505,
+      "durationMs": 566,
       "outputFormat": "json",
       "highlight": [
         "\"enrichedFrom\"",

@@ -2,8 +2,8 @@
   "id": "self-snapshot",
   "title": "Order lines that don't track the source.",
   "tagline": "Your own backend, used as a source.",
-  "skeemVersion": "0.6.0",
-  "capturedAt": "2026-06-13T03:23:35.691Z",
+  "skeemVersion": "0.7.0",
+  "capturedAt": "2026-06-13T03:40:17.355Z",
   "env": {
     "backend": "Directus (local fixture)",
     "liveApis": [],
@@ -15,7 +15,7 @@
       "command": "skeem find products --where sku=WIDGET-9 --json",
       "output": "{\n  \"id\": 1,\n  \"sku\": \"WIDGET-9\",\n  \"name\": \"Hyperdrive Widget\",\n  \"price\": 19.99\n}",
       "exitCode": 0,
-      "durationMs": 108,
+      "durationMs": 103,
       "outputFormat": "json",
       "note": "Price today: 19.99."
     },
@@ -24,7 +24,7 @@
       "command": "skeem create order_lines --order_ref INV-1042 --qty 2 \\\n  --enrich \"self:products?sku=WIDGET-9\" --map name=product_name --map price=unit_price --json",
       "output": "{\n  \"ok\": true,\n  \"operation\": \"create\",\n  \"collection\": \"order_lines\",\n  \"data\": {\n    \"id\": 1,\n    \"order_ref\": \"INV-1042\",\n    \"qty\": 2,\n    \"product_name\": \"Hyperdrive Widget\",\n    \"unit_price\": 19.99\n  },\n  \"plan\": [\n    {\n      \"ref\": \"root\",\n      \"operation\": \"create\",\n      \"collection\": \"order_lines\",\n      \"data\": {\n        \"id\": 1,\n        \"order_ref\": \"INV-1042\",\n        \"qty\": 2,\n        \"product_name\": \"Hyperdrive Widget\",\n        \"unit_price\": 19.99\n      }\n    }\n  ],\n  \"enrichedFrom\": {\n    \"source\": \"self\",\n    \"collection\": \"products\",\n    \"id\": 1\n  },\n  \"enrichedFields\": [\n    \"product_name\",\n    \"unit_price\"\n  ]\n}",
       "exitCode": 0,
-      "durationMs": 145,
+      "durationMs": 131,
       "outputFormat": "json",
       "highlight": [
         "\"unit_price\"",
@@ -37,7 +37,7 @@
       "command": "skeem update products 1 --price 24.99 --json",
       "output": "{\n  \"id\": 1,\n  \"price\": 24.99\n}",
       "exitCode": 0,
-      "durationMs": 213,
+      "durationMs": 218,
       "outputFormat": "json"
     },
     {
@@ -45,7 +45,7 @@
       "command": "skeem get order_lines 1 --json",
       "output": "{\n  \"order_ref\": \"INV-1042\",\n  \"product_name\": \"Hyperdrive Widget\",\n  \"unit_price\": 19.99\n}",
       "exitCode": 0,
-      "durationMs": 106,
+      "durationMs": 108,
       "outputFormat": "json",
       "highlight": [
         "19.99"
