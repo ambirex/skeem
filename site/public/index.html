@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>skeem — agents should look facts up, not make them up</title>
+  <meta name="description" content="skeem is a relational-aware CLI and MCP server for headless backends (Directus, PocketBase, NocoDB, Strapi) and public reference datasets (WikiData, TMDB, CrossRef, and more). Stable JSON envelopes, schema-aware writes, claims, idempotency, and provenance — built for AI agents." />
+  <link rel="canonical" href="https://skeem.brenty.dev" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://skeem.brenty.dev" />
+  <meta property="og:title" content="skeem — a relational CLI + MCP server for AI agents" />
+  <meta property="og:description" content="Agents should look facts up, not make them up. Relational CRUD over your backend and the world's reference data, with stable JSON envelopes." />
+  <meta property="og:image" content="/og/skeem-social.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="site-head">
+    <a class="wordmark" href="/">skeem</a>
+    <nav>
+      <a href="https://github.com/ambirex/skeem">GitHub</a>
+      <a href="https://www.npmjs.com/package/skeem">npm</a>
+      <a href="https://github.com/ambirex/skeem/tree/main/docs">Docs</a>
+      <a href="/SKILL.md">SKILL.md</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <h1>Agents should look facts up, <span class="accent">not make them up.</span></h1>
+        <p class="lede">
+          <strong>skeem</strong> is a relational-aware CLI and MCP server for headless backends
+          — Directus, PocketBase, NocoDB, Strapi — and the world's public reference datasets.
+          Stable JSON envelopes, schema-aware writes, claims, idempotency, and provenance,
+          built for AI agents.
+        </p>
+        <div class="install">
+          <code id="install-cmd">npm install -g skeem</code>
+          <button class="copy-inline" data-copy="npm install -g skeem" type="button" aria-label="Copy install command">⧉</button>
+        </div>
+        <p class="sub">or run it with no install: <code>npx skeem get items Q42 --adapter wikidata --json</code></p>
+      </div>
+
+      <div class="hero-term-wrap">
+        <div id="hero-term"></div>
+        <noscript>
+          <pre class="static-fallback">$ npx skeem get items Q42 --adapter wikidata --json
+{
+  "ok": true,
+  "operation": "get",
+  "collection": "items",
+  "data": {
+    "id": "Q42",
+    "label": "Douglas Adams",
+    "externalIds": { "imdb": ["nm0010930"], "openlibrary": ["OL272947A"], "viaf": ["113230702"] }
+  }
+}</pre>
+        </noscript>
+      </div>
+    </section>
+
+    <section class="agents">
+      <h2>Built for agents — CLI or MCP, your choice</h2>
+      <div class="cards">
+        <div class="card">
+          <h3>Shell-native CLI</h3>
+          <p>Any agent that can run a command can drive skeem. Lowest token overhead, composes with pipes and scripts.
+             <code>skeem tools --format anthropic</code> even generates tool definitions from your live schema.</p>
+          <pre class="snippet">$ skeem create movies --enrich tmdb:movies:603 \
+    --map externalIds.imdb=imdb_id --json</pre>
+        </div>
+        <div class="card">
+          <h3>Or attach it as an MCP server</h3>
+          <p>For Claude, Cursor, and any MCP client — the same engine over stdio, exposed as 18 verb-shaped tools.</p>
+          <pre class="snippet">$ claude mcp add skeem -- npx -y @skeems/mcp</pre>
+        </div>
+      </div>
+      <p class="same">Same engine, same JSON envelopes either way — including the typed <code>error.code</code> agents branch on.</p>
+    </section>
+
+    <section class="demo">
+      <h2>See it run</h2>
+      <p class="section-lede">Real recorded sessions from real-world use cases. Pick one — every command is copy-pasteable.</p>
+      <div id="gallery-picker" class="picker" role="group" aria-label="Choose a demo"></div>
+      <p id="gallery-tagline" class="gallery-tagline"></p>
+      <div id="gallery-term"></div>
+    </section>
+
+    <section class="adapters">
+      <h2>Ten backends. One grammar.</h2>
+      <div class="adapter-rows">
+        <div class="adapter-group">
+          <h3>Write to your backend</h3>
+          <ul class="grid">
+            <li>Directus</li><li>PocketBase</li><li>NocoDB</li><li>Strapi <span class="tier">data-tier</span></li>
+          </ul>
+        </div>
+        <div class="adapter-group">
+          <h3>Read the world's reference data</h3>
+          <ul class="grid">
+            <li>WikiData</li><li>MusicBrainz</li><li>OpenStreetMap</li><li>Open Library</li><li>CrossRef</li><li>TMDB <span class="tier">key</span></li>
+          </ul>
+        </div>
+      </div>
+      <p class="foot-note">Only TMDB needs a key. A new read adapter is about a day of work — PRs welcome.</p>
+    </section>
+
+    <section class="fits">
+      <h2>Where it fits</h2>
+      <div class="fits-grid">
+        <div>
+          <h3>vs. hand-rolled REST/SDK calls</h3>
+          <p>One schema-aware command instead of bespoke glue, with idempotency, soft-delete, and provenance built in.</p>
+        </div>
+        <div>
+          <h3>vs. your backend's own MCP</h3>
+          <p>skeem spans backends <em>and</em> the world's reference datasets, adds a coordination layer raw APIs lack, and works as plain CLI or MCP.</p>
+        </div>
+        <div>
+          <h3>What it is not</h3>
+          <p>Not an ORM, not a migration tool, not a database client. It's an agent-facing data substrate.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-foot">
+    <div>
+      <a href="https://github.com/ambirex/skeem">GitHub</a>
+      <a href="https://www.npmjs.com/package/skeem">npm</a>
+      <a href="https://github.com/ambirex/skeem/blob/main/CHANGELOG.md">Changelog</a>
+      <a href="/llms.txt">llms.txt</a>
+      <a href="/SKILL.md">SKILL.md</a>
+    </div>
+    <p>MIT licensed · docs live in the repo</p>
+  </footer>
+
+  <script type="module" src="/main.js"></script>
+  <script>
+    // Inline copy buttons (install command etc.).
+    document.querySelectorAll(".copy-inline").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        navigator.clipboard?.writeText(btn.dataset.copy).then(() => {
+          const prev = btn.textContent;
+          btn.textContent = "✓";
+          setTimeout(() => (btn.textContent = prev), 1200);
+        });
+      });
+    });
+  </script>
+</body>
+</html>

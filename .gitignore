@@ -7,3 +7,4 @@ coverage/
 test/.tmp/
 test/evals/results/
 .env
+.claude/
