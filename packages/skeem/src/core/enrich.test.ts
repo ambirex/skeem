@@ -147,7 +147,20 @@ describe("resolveSourceEntry", () => {
 
   test("missing adapter or url is reported per entry", () => {
     expect(() => resolveSourceEntry({ x: { connection: { url: "http://x" } } }, "x")).toThrowError(/missing "adapter"/);
-    expect(() => resolveSourceEntry({ x: { adapter: "tmdb" } }, "x")).toThrowError(/missing "connection.url"/);
+    // directus has no default URL, so a missing connection.url still errors.
+    expect(() => resolveSourceEntry({ x: { adapter: "directus" } }, "x")).toThrowError(/missing "connection.url"/);
+  });
+
+  test("reference adapter sources fall back to the adapter default URL", () => {
+    expect(resolveSourceEntry({ wd: { adapter: "wikidata" } }, "wd")).toEqual({
+      adapter: "wikidata",
+      connection: { url: "https://www.wikidata.org" },
+    });
+    // An explicit connection.url still wins over the default.
+    expect(resolveSourceEntry({ wd: { adapter: "wikidata", connection: { url: "https://wd.example" } } }, "wd")).toEqual({
+      adapter: "wikidata",
+      connection: { url: "https://wd.example" },
+    });
   });
 });
 

@@ -7,7 +7,9 @@ Examples use `skeem` as the command name. From source, run the built binary dire
 These flags are parsed before command dispatch:
 
 - `--adapter <name>`
-- `--url <backend-url>`
+- `--url <backend-url>` — optional for the read-tier reference adapters
+  (`wikidata`, `musicbrainz`, `osm`, `openlibrary`, `crossref`, `tmdb`), which
+  default to their canonical endpoint; required for writable backends.
 - `--token <backend-token>`
 - `--profile <profile-name>`
 - `--json`

@@ -26,6 +26,13 @@ The current runtime resolves config in this order:
 6. Apply environment overrides
 7. Apply CLI overrides
 8. Interpolate `${ENV_VAR}` strings in the final config
+9. If no `connection.url` was set by any of the above, fall back to the
+   adapter's default URL (read-tier reference adapters only — see the table
+   below). Writable backends have no default, so a missing URL errors.
+
+This makes the reference adapters zero-config: `skeem get items Q42 --adapter
+wikidata --json` needs no `--url`. The same default fills a `sources:` entry
+that omits `connection.url` (e.g. `{ adapter: wikidata }`).
 
 ## Supported Fields
 

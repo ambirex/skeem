@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import YAML from "yaml";
 
+import { defaultAdapterUrl } from "../core/adapters.js";
 import type { CliGlobalOptions, ResolvedConfig, SourceConfigEntry } from "../types/index.js";
 
 interface RawConfig {
@@ -48,7 +49,11 @@ export async function loadConfig(startDir: string, cli: CliGlobalOptions): Promi
 
   const rootDir = localConfigPath ? path.dirname(localConfigPath) : startDir;
   const adapter = resolved.adapter ?? "directus";
-  const url = resolved.connection?.url;
+  // Precedence: --url flag / SKEEM_URL / config file (all already folded into
+  // resolved.connection.url above) > the adapter's canonical default. Reference
+  // adapters supply a default so `--adapter wikidata` is zero-config; writable
+  // backends have none, so a missing URL still errors.
+  const url = resolved.connection?.url ?? defaultAdapterUrl(adapter);
 
   if (!url) {
     throw new Error("Missing connection URL. Set it in .skeemrc.yaml, ~/.config/skeem/config.yaml, SKEEM_URL, or --url.");

@@ -26,6 +26,28 @@ export function knownAdapters(): string[] {
 }
 
 /**
+ * Default connection URLs for the read-tier reference adapters, so that
+ * `--adapter wikidata` works with no `--url` (and `sources:` entries can omit
+ * `connection.url`). Only the public reference services have a canonical
+ * endpoint; the writable backends (directus/pocketbase/nocodb/strapi) are
+ * deployment-specific, so a wrong guess is worse than the missing-URL error.
+ * URLs mirror the adapter smoke scripts (`test/smoke/*.mjs`).
+ */
+const DEFAULT_URLS: Record<string, string> = {
+  wikidata: "https://www.wikidata.org",
+  musicbrainz: "https://musicbrainz.org",
+  osm: "https://api.openstreetmap.org",
+  openlibrary: "https://openlibrary.org",
+  crossref: "https://api.crossref.org",
+  tmdb: "https://api.themoviedb.org/3",
+};
+
+/** The canonical default URL for an adapter, or `undefined` if it has none. */
+export function defaultAdapterUrl(name: string): string | undefined {
+  return DEFAULT_URLS[name];
+}
+
+/**
  * Resolve, instantiate, and connect the adapter named by config. Throws a
  * UsageError for an unknown adapter name.
  */

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Adapter-default URLs** for the read-tier reference adapters: `--adapter
+  wikidata` (and `musicbrainz`, `osm`, `openlibrary`, `crossref`, `tmdb`) now
+  works with no `--url`, resolving to the service's canonical endpoint (e.g.
+  `https://www.wikidata.org`). The same default applies to a `sources:` entry
+  that omits `connection.url`. Precedence is unchanged otherwise: `--url` flag >
+  `SKEEM_URL` > config file > adapter default. Writable backends
+  (directus/pocketbase/nocodb/strapi) have no default — a missing URL still
+  errors, since a wrong guess is worse than the message. New
+  `defaultAdapterUrl()` helper in `core/adapters.ts`.
+
 ## [0.6.0] - 2026-06-11
 
 ### Added

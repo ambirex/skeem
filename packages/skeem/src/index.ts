@@ -11,6 +11,10 @@ export * from "./core/provenance.js";
 export * from "./core/trash.js";
 export * from "./core/versioning.js";
 export * from "./output/formatter.js";
+// Curated, not `export *`: the runtime module also holds CLI-only stdin helpers
+// (readExecPlanFromStdin) that must not leak into library consumers like the
+// MCP server, which drive the runtime in-process. See @skeems/mcp.
+export { SkeemRuntime } from "./core/runtime.js";
 export * from "./schema/document.js";
 export * from "./schema/diff.js";
 export * from "./schema/plan.js";

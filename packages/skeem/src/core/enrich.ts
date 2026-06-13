@@ -1,4 +1,5 @@
 import { SkemError, UsageError, ValidationError } from "../errors/index.js";
+import { defaultAdapterUrl } from "./adapters.js";
 import { parsePrimaryKeyLike } from "./data-verbs.js";
 import { parseFilterAssignment } from "./values.js";
 import type {
@@ -130,7 +131,9 @@ export function resolveSourceEntry(
     throw new UsageError(`Enrichment source "${name}" is missing "adapter" in its config.`);
   }
 
-  const url = entry.connection?.url;
+  // Reference adapters supply a canonical default URL, so a `sources:` entry
+  // like `{ adapter: wikidata }` needs no `connection.url`.
+  const url = entry.connection?.url ?? defaultAdapterUrl(entry.adapter);
   if (!url) {
     throw new UsageError(`Enrichment source "${name}" is missing "connection.url" in its config.`);
   }
