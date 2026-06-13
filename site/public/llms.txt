@@ -7,15 +7,17 @@ How to drive skeem well:
 - Discover before writing: `skeem ls --counts`, `skeem describe <collection>`, `skeem discover` reveal exact field names, required/enum fields, and relations.
 - Relation grammar on write values: `42` (scalar/fk id), `@42` (link by id), `?field=value` (resolve existing), `??field=value` (resolve-or-create), `child.field` (nested inline). Prefer `?`/`??` over manual find-then-create.
 - `skeem tools --format anthropic|openai` generates typed tool definitions from the live schema.
+- CLI or MCP: shell-capable agents run the `skeem` CLI; other MCP clients attach `@skeems/mcp` (`claude mcp add skeem -- npx -y @skeems/mcp`). Tools are `skeem_<verb>` with the collection as a parameter; `--json` is implicit and `ok:false` is a normal result, so you still branch on `error.code`.
 - Coordination primitives keep multi-step writes safe: `--idempotency-key`, `claim`/`claims`/`release`, soft-delete + `restore`, provenance/versions (`skeem init` provisions the system tables).
 - Enrich writes from a reference dataset: `create`/`upsert` `--enrich source:collection:id` (or `"source:collection?field=value"`) with `--map externalIds.imdb=imdb_id`; sources are named in the config `sources:` block, explicit values always win, and the envelope reports `enrichedFrom`/`enrichedFields`.
 
 ## Start here
 - [SKILL.md](https://github.com/ambirex/skeem/blob/main/SKILL.md): the agent playbook — envelope contract, discovery-first workflow, relation grammar, coordination primitives, and the `skeem tools` generator.
-- [README.md](https://github.com/ambirex/skeem/blob/main/README.md): overview, install, quickstart, and where skeem fits versus raw SDK calls and MCP servers.
+- [README.md](https://github.com/ambirex/skeem/blob/main/README.md): overview, install, quickstart, and where skeem fits — as a CLI and as an MCP server.
 
 ## Reference
 - [CLI Reference](https://github.com/ambirex/skeem/blob/main/docs/reference/cli.md): every command, flag, and the output/exit-code contract.
+- [MCP Server](https://github.com/ambirex/skeem/blob/main/docs/reference/mcp.md): `@skeems/mcp` — the tool list, launch args, client config, and the `ok:false`-as-normal-result contract.
 - [Configuration Reference](https://github.com/ambirex/skeem/blob/main/docs/reference/configuration.md): `.skeemrc.yaml`, profiles, and per-adapter connection/auth.
 - [Schema Management](https://github.com/ambirex/skeem/blob/main/docs/reference/schema-management.md): `discover`, `diff`, and `define` (relations and enums).
 - [System Features](https://github.com/ambirex/skeem/blob/main/docs/reference/system-features.md): claims, provenance, versions, trash, annotations, aliases, idempotency.

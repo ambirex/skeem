@@ -26,6 +26,7 @@ This repository is an active implementation of `skeem`, a relational-aware CLI f
 
 - Keep backend-agnostic logic in `packages/skeem`.
 - Keep Directus-specific behavior in `packages/skeem-directus`.
+- Keep `packages/skeem-mcp` a thin envelope-passthrough over `SkeemRuntime` — no business logic in the MCP layer; tools map 1:1 to runtime verbs and return the same envelope.
 - Do not leak Directus response shapes into shared core interfaces unless the public contract explicitly calls for them.
 - Keep docs and examples aligned with the implemented CLI, not just the aspirational spec.
 - When the spec and implementation differ, document the boundary instead of silently papering over it.

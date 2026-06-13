@@ -8,6 +8,7 @@ This repo started life as one large specification. The docs are now split so age
 - [Agent Workflows](guides/agent-workflows.md) for JSON-first usage, claims, provenance, and compound plans
 - [LLM Eval Plan](guides/llm-evals.md) for use cases, assumptions, and a minimal real-model test rig
 - [CLI Reference](reference/cli.md) for verb-by-verb behavior
+- [MCP Server](reference/mcp.md) for `@skeems/mcp` — driving skeem from Claude, Cursor, and other MCP clients
 - [Configuration Reference](reference/configuration.md) for `.skeemrc.yaml`, profiles, env vars, and cache behavior
 
 ## Product Areas

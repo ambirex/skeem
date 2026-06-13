@@ -19,6 +19,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`@skeems/mcp` — an MCP server** exposing skeem to MCP clients (Claude Code,
+  Claude Desktop, Cursor) over stdio: `claude mcp add skeem -- npx -y
+  @skeems/mcp`. A fixed, verb-shaped tool set (18 tools — ls/describe/discover/
+  get/find/create/update/upsert/delete/restore/link/unlink/exec/claim/claims/
+  release/annotate/init), collection as a parameter, with `enrich`/`map`,
+  idempotency, actor/context, and dry-run where the CLI has them. It is a thin
+  pass-through to `SkeemRuntime`: tools return the same JSON envelope, and a
+  domain failure is a normal result with a typed `error.code` (not an MCP
+  `isError`), so agents branch on the code exactly as on the CLI. Schema
+  mutation, aliases, and cache control are CLI-only. `--read-only` registers
+  only the read tools. Reference: `docs/reference/mcp.md`. (`SkeemRuntime` is
+  now exported from `skeem`'s library surface.)
+
+- **Marketing site** at [skeem.brenty.dev](https://skeem.brenty.dev): a static
+  site (`site/`) with a dependency-free terminal widget that replays real,
+  captured CLI sessions for seven real-world use cases. The capture pipeline
+  (`npm run site:capture`) records actual output against the Directus fixture
+  and live reference APIs.
+
 - **Adapter-default URLs** for the read-tier reference adapters: `--adapter
   wikidata` (and `musicbrainz`, `osm`, `openlibrary`, `crossref`, `tmdb`) now
   works with no `--url`, resolving to the service's canonical endpoint (e.g.

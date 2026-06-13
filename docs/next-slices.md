@@ -29,7 +29,8 @@ The goal of the original next slices was to close the biggest Phase 1 gaps befor
 - Completed: Slice 15: Claims and Coordination Foundation
 - Completed: Slice 16: Annotations Foundation
 - Completed: Slice 17: Idempotency Foundation
-- Next logical step: Slice 18: Extension Registry Foundation
+- Completed (v0.7.0, marketing push): adapter-default URLs for reference adapters; `@skeems/mcp` MCP server; the skeem.brenty.dev marketing site with a recorded interactive demo.
+- Next logical step: Slice 18: Extension Registry Foundation (still deferred as speculative per the 2026-06 review)
 
 ## Slice 1: Discovery Completeness
 

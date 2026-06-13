@@ -112,10 +112,13 @@ operation's output into the next:
 
 ```bash
 echo '{"operations":[
-  {"ref":"acme","operation":"create","collection":"companies","data":{"name":"Acme"}},
-  {"ref":"root","operation":"create","collection":"people","data":{"name":"Mia","company":"$acme.id"}}
+  {"ref":"acme","op":"create","collection":"companies","data":{"name":"Acme"}},
+  {"ref":"root","op":"create","collection":"people","data":{"name":"Mia","company":"$acme.id"}}
 ]}' | skeem exec --json
 ```
+
+Each operation's verb key is `op` (`create`, `get`, `find`, `findOne`, `update`,
+`delete`, `upsert`, `link`, `unlink`).
 
 ## Generate your own tool definitions
 
@@ -178,9 +181,20 @@ Etiquette: the MusicBrainz/Nominatim clients throttle to ~1 req/s **per
 process** — when looping over many records you are responsible for your own
 pacing (the CLI is one process per call).
 
+## Over MCP
+
+The same engine ships as an MCP server, `@skeems/mcp`
+(`claude mcp add skeem -- npx -y @skeems/mcp`). Everything above transfers 1:1:
+the tools are `skeem_<verb>` (e.g. `skeem_create`, `skeem_find`, `skeem_exec`)
+with the collection as a parameter, `--json` is implicit, and the result is the
+same envelope — including `ok:false` as a normal result, so branch on
+`error.code` exactly as you would on the CLI. Schema mutation (`define`/`diff`)
+and aliases are CLI-only. See `docs/reference/mcp.md`.
+
 ## Deeper references
 
 - `docs/reference/cli.md` — every command and flag
+- `docs/reference/mcp.md` — the MCP server: tools, launch args, client config
 - `docs/reference/schema-management.md` — `discover`/`diff`/`define`
 - `docs/reference/system-features.md` — claims, provenance, versions, trash, aliases
 - `docs/spec/full-spec.md` — the complete design

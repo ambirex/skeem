@@ -1,11 +1,13 @@
 # skeem
 
-Relational-aware CLI for headless backends and public reference datasets, built for AI agents. **Agents should look facts up, not make them up.**
+Relational-aware CLI and MCP server for headless backends and public reference datasets, built for AI agents. **Agents should look facts up, not make them up.**
 
-Try it in ten seconds — no install, no backend, no API key:
+**[skeem.brenty.dev](https://skeem.brenty.dev)** — see it run.
+
+Try it in ten seconds — no install, no backend, no API key, no URL:
 
 ```bash
-npx skeem get items Q42 --adapter wikidata --url https://www.wikidata.org --json
+npx skeem get items Q42 --adapter wikidata --json
 ```
 
 ```jsonc
@@ -66,11 +68,13 @@ See [docs/adapter-roadmap.md](docs/adapter-roadmap.md) for shipped and candidate
 - Predictable output: every command can return a stable JSON envelope with `--json`.
 - Backend abstraction: core behavior lives in `packages/skeem`; ten adapters are swapped via the `adapter` config field — headless backends for writes, public reference datasets (WikiData, MusicBrainz, OSM, Open Library, CrossRef, TMDB) for linked lookups.
 - Self-describing: `skeem tools` emits LLM tool definitions from the live schema, and [SKILL.md](SKILL.md) teaches the envelope + relation grammar.
+- CLI or MCP: shell-capable agents drive the CLI directly; everything else attaches the [`@skeems/mcp`](packages/skeem-mcp) server (`claude mcp add skeem -- npx -y @skeems/mcp`). Same verbs, same JSON envelopes either way — see [docs/reference/mcp.md](docs/reference/mcp.md).
 
 ## Where It Fits
 
 - Versus hand-rolled REST/SDK calls: one schema-aware command replaces several API requests, with idempotency, provenance, and stable JSON built in.
-- Versus an MCP server: `skeem` is a plain CLI, so any agent with shell access can drive it — no server process, low token overhead, and it composes with pipes and scripts.
+- CLI or MCP, your choice: shell-capable agents drive the `skeem` CLI directly (lowest token overhead, composes with pipes and scripts); every other MCP client attaches `@skeems/mcp` and gets the same verbs over stdio. Same engine, same envelopes.
+- Versus your backend's own MCP server: skeem spans multiple backends *and* the world's reference datasets, and adds a coordination layer (claims, idempotency, provenance) that raw APIs don't have.
 - `skeem` is not an ORM, a migration framework, or a database client: it works at the API level of the backend and delegates storage concerns to it.
 
 ## Install
@@ -87,6 +91,19 @@ skeem ls --url http://127.0.0.1:8055 --token "$DIRECTUS_TOKEN"
 ```
 
 `skeem` pulls in `@skeems/directus` automatically. Node 20+ is required.
+
+### As an MCP server
+
+For MCP clients (Claude Code, Claude Desktop, Cursor), attach the companion
+[`@skeems/mcp`](packages/skeem-mcp) package — the same engine over stdio:
+
+```bash
+claude mcp add skeem -- npx -y @skeems/mcp --adapter directus --url http://127.0.0.1:8055
+# or zero-config against a reference dataset:
+claude mcp add wikidata -- npx -y @skeems/mcp --adapter wikidata
+```
+
+See [docs/reference/mcp.md](docs/reference/mcp.md) for the tool list and client config.
 
 ### From source
 
