@@ -37,6 +37,9 @@
       ],
       "@skeems/tmdb": [
         "packages/skeem-tmdb/src/index.ts"
+      ],
+      "skeem": [
+        "packages/skeem/src/index.ts"
       ]
     },
     "strict": true,

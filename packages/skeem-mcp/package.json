@@ -1,0 +1,62 @@
+{
+  "name": "@skeems/mcp",
+  "version": "0.6.0",
+  "description": "MCP server for skeem: relational-aware tools over headless backends (Directus, PocketBase, NocoDB, Strapi) and public reference datasets (WikiData, TMDB, CrossRef, …), for MCP clients like Claude.",
+  "license": "MIT",
+  "author": "Brent Doll <brent.doll@gmail.com>",
+  "homepage": "https://github.com/ambirex/skeem#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ambirex/skeem.git",
+    "directory": "packages/skeem-mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/ambirex/skeem/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "skeem",
+    "ai",
+    "agents",
+    "claude",
+    "directus",
+    "pocketbase",
+    "nocodb",
+    "strapi",
+    "wikidata"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "skeem-mcp": "dist/bin/skeem-mcp.js"
+  },
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "skeem": "0.6.0",
+    "zod": "^3.25.76"
+  },
+  "scripts": {
+    "build": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run build"
+  }
+}
