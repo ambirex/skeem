@@ -1,0 +1,41 @@
+{
+  "id": "pivot-bridge",
+  "title": "One id unlocks the whole graph.",
+  "tagline": "The same entity across three datasets.",
+  "skeemVersion": "0.6.0",
+  "capturedAt": "2026-06-13T03:23:35.691Z",
+  "env": {
+    "backend": null,
+    "liveApis": [
+      "musicbrainz",
+      "openlibrary"
+    ],
+    "skeemrc": null
+  },
+  "steps": [
+    {
+      "comment": "# the MusicBrainz artist for Douglas Adams",
+      "command": "npx skeem get artists e9ed318d-8cc5-4cf8-ab77-505e39ab6ea4 --adapter musicbrainz --json",
+      "output": "{\n  \"id\": \"e9ed318d-8cc5-4cf8-ab77-505e39ab6ea4\",\n  \"name\": \"Douglas Adams\",\n  \"wikidata\": [\n    \"Q42\"\n  ]\n}",
+      "exitCode": 0,
+      "durationMs": 719,
+      "outputFormat": "json",
+      "highlight": [
+        "\"Q42\""
+      ],
+      "note": "A different dataset, pointing back at the same WikiData hub."
+    },
+    {
+      "comment": "# and the Open Library author",
+      "command": "npx skeem get authors OL272947A --adapter openlibrary --json",
+      "output": "{\n  \"id\": \"OL272947A\",\n  \"name\": \"Douglas Adams\",\n  \"wikidata\": [\n    \"Q42\"\n  ]\n}",
+      "exitCode": 0,
+      "durationMs": 1946,
+      "outputFormat": "json",
+      "highlight": [
+        "\"Q42\""
+      ],
+      "note": "Three datasets, one shared identity — pivot freely between them."
+    }
+  ]
+}

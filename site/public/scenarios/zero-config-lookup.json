@@ -1,0 +1,41 @@
+{
+  "id": "zero-config-lookup",
+  "title": "No backend. No key. One command.",
+  "tagline": "Public reference data, straight from the CLI.",
+  "skeemVersion": "0.6.0",
+  "capturedAt": "2026-06-13T03:23:35.691Z",
+  "env": {
+    "backend": null,
+    "liveApis": [
+      "wikidata"
+    ],
+    "skeemrc": null
+  },
+  "steps": [
+    {
+      "comment": "# look up Douglas Adams — no install, no backend, no API key",
+      "command": "npx skeem get items Q42 --adapter wikidata --json",
+      "output": "{\n  \"label\": \"Douglas Adams\",\n  \"description\": \"British science fiction writer and humorist (1952–2001)\",\n  \"imdb\": [\n    \"nm0010930\"\n  ],\n  \"musicbrainz\": [\n    \"e9ed318d-8cc5-4cf8-ab77-505e39ab6ea4\"\n  ],\n  \"openlibrary\": [\n    \"OL272947A\"\n  ],\n  \"viaf\": [\n    \"113230702\"\n  ]\n}",
+      "exitCode": 0,
+      "durationMs": 503,
+      "outputFormat": "json",
+      "highlight": [
+        "\"Douglas Adams\""
+      ],
+      "note": "One Q-id, and identifiers for IMDb, MusicBrainz, Open Library, VIAF… all ride along — every value is an array."
+    },
+    {
+      "comment": "# go the other way: which item owns this IMDb id?",
+      "command": "npx skeem find items --where imdb=tt0133093 --adapter wikidata --json",
+      "output": "{\n  \"id\": \"Q83495\",\n  \"label\": \"The Matrix\"\n}",
+      "exitCode": 0,
+      "durationMs": 465,
+      "outputFormat": "json",
+      "highlight": [
+        "\"The Matrix\"",
+        "\"Q83495\""
+      ],
+      "note": "Reverse lookup by external id — the bridge runs both directions."
+    }
+  ]
+}

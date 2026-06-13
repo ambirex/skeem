@@ -22,6 +22,8 @@
     "smoke:crossref": "npm run build && node ./test/smoke/crossref.mjs",
     "smoke:tmdb": "npm run build && node ./test/smoke/tmdb.mjs",
     "smoke:mcp": "npm run build && node ./test/smoke/mcp.mjs",
+    "site:dev": "node ./site/serve.mjs",
+    "site:capture": "npm run build && node ./site/capture/capture.mjs",
     "conformance": "npm run build && node ./test/conformance/run.mjs",
     "conformance:directus": "npm run build && node ./test/conformance/run.mjs --adapter directus",
     "conformance:pocketbase": "npm run build && node ./test/conformance/run.mjs --adapter pocketbase",

@@ -1,0 +1,46 @@
+{
+  "scenarios": [
+    {
+      "id": "zero-config-lookup",
+      "title": "No backend. No key. One command.",
+      "tagline": "Public reference data, straight from the CLI.",
+      "file": "zero-config-lookup.json"
+    },
+    {
+      "id": "enrich-create",
+      "title": "Look it up, don't make it up.",
+      "tagline": "Agents fetch facts instead of recalling them.",
+      "file": "enrich-create.json"
+    },
+    {
+      "id": "reading-log",
+      "title": "A reading log from bare ISBNs.",
+      "tagline": "No-auth reference lookups, safe to re-run.",
+      "file": "reading-log.json"
+    },
+    {
+      "id": "self-snapshot",
+      "title": "Order lines that don't track the source.",
+      "tagline": "Your own backend, used as a source.",
+      "file": "self-snapshot.json"
+    },
+    {
+      "id": "claims",
+      "title": "Two agents, one record.",
+      "tagline": "Coordination primitives, built in.",
+      "file": "claims.json"
+    },
+    {
+      "id": "exec-dag",
+      "title": "A dependent graph in one call.",
+      "tagline": "Multi-step plans with reference resolution.",
+      "file": "exec-dag.json"
+    },
+    {
+      "id": "pivot-bridge",
+      "title": "One id unlocks the whole graph.",
+      "tagline": "The same entity across three datasets.",
+      "file": "pivot-bridge.json"
+    }
+  ]
+}

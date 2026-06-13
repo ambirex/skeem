@@ -1,0 +1,62 @@
+{
+  "id": "reading-log",
+  "title": "A reading log from bare ISBNs.",
+  "tagline": "No-auth reference lookups, safe to re-run.",
+  "skeemVersion": "0.6.0",
+  "capturedAt": "2026-06-13T03:23:35.691Z",
+  "env": {
+    "backend": "Directus (local fixture)",
+    "liveApis": [
+      "openlibrary"
+    ],
+    "skeemrc": "adapter: directus\nconnection:\n  url: https://your-directus.example\n  token: ${DIRECTUS_TOKEN}\nsources:\n  wikidata: { adapter: wikidata }\n  openlibrary: { adapter: openlibrary }\n  musicbrainz: { adapter: musicbrainz }\n  self:\n    adapter: directus\n    connection:\n      url: https://your-directus.example\n      token: ${DIRECTUS_TOKEN}"
+  },
+  "steps": [
+    {
+      "comment": "# resolve an ISBN against Open Library (no auth)",
+      "command": "skeem find editions --where isbn=9780345391803 --adapter openlibrary --json",
+      "output": "{\n  \"id\": null,\n  \"title\": null\n}",
+      "exitCode": 0,
+      "durationMs": 158,
+      "outputFormat": "json",
+      "note": "The find-form lookup; works for a barcode scanner in a shell loop."
+    },
+    {
+      "comment": "# upsert it into your catalog, enriched from Open Library, with an idempotency key",
+      "command": "skeem upsert books --match isbn_13=9780345391803 \\\n  --enrich \"openlibrary:editions?isbn=9780345391803\" --idempotency-key isbn-9780345391803 --json",
+      "output": "{\n  \"ok\": true,\n  \"operation\": \"upsert\",\n  \"action\": \"created\",\n  \"collection\": \"books\",\n  \"data\": {\n    \"id\": 1,\n    \"title\": \"The Hitchhiker's Guide to the Galaxy\",\n    \"authors\": null,\n    \"isbn_13\": \"9780345391803.0\",\n    \"number_of_pages\": 309,\n    \"subjects\": null\n  },\n  \"plan\": [\n    {\n      \"ref\": \"root\",\n      \"operation\": \"create\",\n      \"collection\": \"books\",\n      \"data\": {\n        \"id\": 1,\n        \"title\": \"The Hitchhiker's Guide to the Galaxy\",\n        \"authors\": null,\n        \"isbn_13\": \"9780345391803.0\",\n        \"number_of_pages\": 309,\n        \"subjects\": null\n      }\n    }\n  ],\n  \"enrichedFrom\": {\n    \"source\": \"openlibrary\",\n    \"collection\": \"editions\",\n    \"id\": \"OL27297031M\"\n  },\n  \"enrichedFields\": [\n    \"number_of_pages\",\n    \"title\"\n  ]\n}",
+      "exitCode": 0,
+      "durationMs": 4273,
+      "outputFormat": "json",
+      "highlight": [
+        "\"action\"",
+        "\"created\""
+      ],
+      "note": "First run creates the row."
+    },
+    {
+      "comment": "# run the exact same command again — idempotency replays the stored result",
+      "command": "skeem upsert books --match isbn_13=9780345391803 \\\n  --enrich \"openlibrary:editions?isbn=9780345391803\" --idempotency-key isbn-9780345391803 --json",
+      "output": "{\n  \"ok\": true,\n  \"action\": \"created\",\n  \"id\": 1\n}",
+      "exitCode": 0,
+      "durationMs": 179,
+      "outputFormat": "json",
+      "highlight": [
+        "\"created\""
+      ],
+      "note": "action stays \"created\" (not \"updated\") — same key + input returns the stored result, not a second write."
+    },
+    {
+      "comment": "# and there's still just one book — the re-run created no duplicate",
+      "command": "skeem find books --json",
+      "output": "{\n  \"count\": 1,\n  \"titles\": [\n    \"The Hitchhiker's Guide to the Galaxy\"\n  ]\n}",
+      "exitCode": 0,
+      "durationMs": 137,
+      "outputFormat": "json",
+      "highlight": [
+        "\"count\": 1"
+      ],
+      "note": "Point this at a CSV of ISBNs and re-run the whole loop freely."
+    }
+  ]
+}

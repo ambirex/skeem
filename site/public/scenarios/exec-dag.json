@@ -1,0 +1,44 @@
+{
+  "id": "exec-dag",
+  "title": "A dependent graph in one call.",
+  "tagline": "Multi-step plans with reference resolution.",
+  "skeemVersion": "0.6.0",
+  "capturedAt": "2026-06-13T03:23:35.691Z",
+  "env": {
+    "backend": "Directus (local fixture)",
+    "liveApis": [],
+    "skeemrc": "adapter: directus\nconnection:\n  url: https://your-directus.example\n  token: ${DIRECTUS_TOKEN}\nsources:\n  wikidata: { adapter: wikidata }\n  openlibrary: { adapter: openlibrary }\n  musicbrainz: { adapter: musicbrainz }\n  self:\n    adapter: directus\n    connection:\n      url: https://your-directus.example\n      token: ${DIRECTUS_TOKEN}"
+  },
+  "steps": [
+    {
+      "comment": "# a plan: upsert a company, then create a person linked to it",
+      "command": "cat plan.json",
+      "output": "{\n  \"operations\": [\n    {\n      \"ref\": \"company\",\n      \"op\": \"upsert\",\n      \"collection\": \"companies\",\n      \"match\": {\n        \"name\": \"Acme\"\n      },\n      \"data\": {\n        \"industry\": \"Robotics\"\n      }\n    },\n    {\n      \"ref\": \"root\",\n      \"op\": \"create\",\n      \"collection\": \"people\",\n      \"data\": {\n        \"name\": \"Mia\",\n        \"company_id\": \"$company.id\"\n      }\n    }\n  ]\n}",
+      "exitCode": 0,
+      "durationMs": 0,
+      "outputFormat": "json",
+      "note": "$company.id is resolved from the first step's result."
+    },
+    {
+      "comment": "# run the whole plan in one call",
+      "command": "skeem exec --json < plan.json",
+      "output": "{\n  \"ok\": true,\n  \"operation\": \"exec\",\n  \"plan\": [\n    {\n      \"ref\": \"company\",\n      \"operation\": \"upsert\",\n      \"collection\": \"companies\",\n      \"data\": {\n        \"id\": 1,\n        \"name\": \"Acme\",\n        \"industry\": \"Robotics\"\n      }\n    },\n    {\n      \"ref\": \"root\",\n      \"operation\": \"create\",\n      \"collection\": \"people\",\n      \"data\": {\n        \"id\": 1,\n        \"name\": \"Mia\",\n        \"company_id\": 1\n      }\n    }\n  ],\n  \"count\": 2\n}",
+      "exitCode": 0,
+      "durationMs": 141,
+      "outputFormat": "json",
+      "highlight": [
+        "\"compound",
+        "\"company_id\""
+      ],
+      "note": "Operations run in order; $ref.field threads results between steps."
+    },
+    {
+      "comment": "# read the person back with the company expanded",
+      "command": "skeem get people 1 --expand company_id --json",
+      "output": "{\n  \"id\": 1,\n  \"name\": \"Mia\",\n  \"company_id\": {\n    \"id\": 1,\n    \"name\": \"Acme\",\n    \"industry\": \"Robotics\"\n  }\n}",
+      "exitCode": 0,
+      "durationMs": 105,
+      "outputFormat": "json"
+    }
+  ]
+}
