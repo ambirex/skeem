@@ -68,6 +68,10 @@ export function createWikiDataAdapter(): SkemAdapter {
         action: "wbgetentities",
         ids: entityId,
         languages: language,
+        // WikiData migrated many entities' labels to the language-agnostic `mul`
+        // code (2024); languagefallback lets `languages=en` still resolve them
+        // (e.g. Q42 → "Douglas Adams"), matching what users see on the site.
+        languagefallback: 1,
         props: "labels|descriptions|aliases|claims|datatype|sitelinks/urls",
       });
       const entity = response.entities?.[entityId];
@@ -123,6 +127,7 @@ export function createWikiDataAdapter(): SkemAdapter {
           action: "wbgetentities",
           ids: entityId,
           languages: language,
+          languagefallback: 1,
           props: "labels|descriptions",
         });
         const entity = response.entities?.[entityId];
@@ -217,6 +222,7 @@ async function findByExternalId(
     action: "wbgetentities",
     ids: titles.join("|"),
     languages: language,
+    languagefallback: 1,
     props: "labels|descriptions",
   });
   return titles

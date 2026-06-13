@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **WikiData labels for `mul`-coded entities.** WikiData migrated many entities'
+  labels to the language-agnostic `mul` language code (2024), so a plain
+  `languages=en` query returned an empty label (e.g. `get items Q42` had
+  `label: null` despite being Douglas Adams). The adapter now sends
+  `languagefallback=1`, so requested-language labels resolve through `mul`
+  (`get items Q42` → `label: "Douglas Adams"`). Descriptions and external ids
+  were unaffected.
+
 ### Added
 
 - **Adapter-default URLs** for the read-tier reference adapters: `--adapter
